@@ -9,6 +9,7 @@ import lombok.Builder;
 import lombok.Data;
 
 import java.time.LocalDateTime;
+import java.time.ZoneOffset;
 
 @Data
 @TableName("consultation_session")
@@ -38,5 +39,6 @@ public class ConsultationSession {
     // 最后一次情绪分析更新时间
     @TableField("last_emotion_updated_at")
     private LocalDateTime lastEmotionUpdatedAt;
+
 
 }

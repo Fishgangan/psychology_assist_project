@@ -11,7 +11,7 @@ spring:
     open-ai:
       chat:
         options:
-          model: qwen-plus
+          model: qwen3.8-27b
           tool-calling:
             enabled: true
         completions-path: /chat/completions

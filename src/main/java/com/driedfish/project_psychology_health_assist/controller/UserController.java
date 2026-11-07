@@ -44,4 +44,5 @@ public class UserController {
         userService.logout(token);
         return Result.success("登出成功");
     }
+    
 }

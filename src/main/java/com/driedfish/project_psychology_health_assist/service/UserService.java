@@ -25,6 +25,7 @@ public class UserService {
     private UserMapper userMapper;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
+    //用户登录
     public UserLoginResponseDTO login(LoginCommandDTO dto) {
         //构建查询条件
         LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
@@ -47,6 +48,7 @@ public class UserService {
         UserLoginResponseDTO.UserDetailResponseDTO userInfo = UserConvert.entityToDetailResponse(user);
         return UserConvert.entityToLoginResponse(token, userInfo);
     }
+    //用户注册
     public UserLoginResponseDTO.UserDetailResponseDTO register(RegisterCommandDTO dto) {
         //验证密码是否一致
         if (!dto.getPassword().equals(dto.getConfirmPassword())) {
@@ -74,7 +76,7 @@ public class UserService {
 
         return UserConvert.entityToDetailResponse(user);
     }
-
+    //根据用户ID查询用户详情
     public UserLoginResponseDTO.UserDetailResponseDTO getUserById(Long id) {
 //        LambdaQueryWrapper<User> queryWrapper = new LambdaQueryWrapper<>();
 //        queryWrapper.eq(User::getId, id);
@@ -87,10 +89,12 @@ public class UserService {
 
         return userInfo;
     }
+    //用户登出
     public void logout(String token) {
         if (!StringUtils.hasText(token)) {
             throw new BusinessException(ResultCode.TOKEN_NOT_BLANKED);
         }
         JwtTokenUtil.invalidateToken(token);
     }
+
 }

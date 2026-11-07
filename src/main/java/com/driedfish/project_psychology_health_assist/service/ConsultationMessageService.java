@@ -12,7 +12,7 @@ import java.time.LocalDateTime;
 public class ConsultationMessageService {
     @Autowired
     private ConsultationMessageMapper consultationMessageMapper;
-
+    //保存用户消息
     public ConsultationMessage saveUserMessage(Long sessionId, String content,String emotion_tag) {
         //构建用户消息实体
         ConsultationMessage userMessage = ConsultationMessage.builder()
@@ -40,6 +40,7 @@ public class ConsultationMessageService {
         return aiMessage;
 
     }
+    //获取会话消息数量
     public Integer getMessageCountBySessionId(Long sessionId) {
         LambdaQueryWrapper<ConsultationMessage> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(ConsultationMessage::getSessionId, sessionId);
@@ -58,6 +59,7 @@ public class ConsultationMessageService {
 
 
     }
+    //将消息实体转换为响应DTO
     public ConsultationMessageResponseDTO convertToResponseDTO(ConsultationMessage message) {
         if(message == null) {
             return null;
@@ -76,4 +78,9 @@ public class ConsultationMessageService {
                 .contentLength(message.getContent().length())
                 .build();
     }
-}
+    //删除会话所有消息
+    public void deleteMessagesBySessionId(Long sessionId) {
+        LambdaQueryWrapper<ConsultationMessage> queryWrapper = new LambdaQueryWrapper<>();
+        queryWrapper.eq(ConsultationMessage::getSessionId, sessionId);
+        consultationMessageMapper.delete(queryWrapper);
+    }}

@@ -7,30 +7,35 @@ public class Result<T> {
     private String code;
     private String msg;
     private T data;
+    private Result(String code, String msg, T data) {
+        this.code = code;
+        this.msg = msg;
+        this.data = data;
+    }
     public static <T> Result<T> success() {
-        Result<T> result =new Result<>();
-        result.setCode(ResultCode.SUCCESS.getCode());
-        result.setMsg(ResultCode.SUCCESS.getMsg());
-        return result;
+        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), null);
 
     }
     public static <T> Result<T> success(T data) {
-        Result<T> result =success();
-        result.setData(data);
-        return result;
+        return new Result<>(ResultCode.SUCCESS.getCode(), ResultCode.SUCCESS.getMsg(), data);
     }
     public static <T> Result<T> error() {
-        Result<T> result =new Result<>();
-        result.setCode(ResultCode.ERROR.getCode());
-        result.setMsg(ResultCode.ERROR.getMsg());
-        return result;
+        return new Result<>(ResultCode.ERROR.getCode(), ResultCode.ERROR.getMsg(), null);
+    }
+    public static <T> Result<T> error(ResultCode resultCode) {
+        return new Result<>(resultCode.getCode(), resultCode.getMsg(), null);
+
+    }
+    public static <T> Result<T> error(ResultCode resultCode, T data) {
+        return new Result<>(resultCode.getCode(), resultCode.getMsg(), data);
+
     }
     public static <T> Result<T> error(String code, String msg, T data) {
-        Result<T> result =new Result<>();
-        result.setCode(code);
-        result.setMsg(msg);
-        result.setData(data);
-        return result;
+        return new Result<>(code, msg, data);
+
+    }
+    public static <T> Result<T> error(String code, String msg) {
+        return new Result<>(code, msg, null);
 
     }
 }

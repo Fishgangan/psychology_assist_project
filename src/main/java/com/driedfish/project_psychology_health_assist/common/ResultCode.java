@@ -31,6 +31,10 @@ public enum ResultCode {
     EMAIL_SAME("6006", "邮箱已存在"),
     USER_SAME("6007", "用户已存在"),
     USER_TYPE_INVALID("6008", "用户类型无效"),
+    // 会话相关错误
+    SESSION_ID_FORMAT_ERROR("6009", "会话ID格式错误"),
+    SESSION_NOT_EXIST("6010", "会话不存在"),
+    SESSION_NOT_PERMISSION("6011", "这不是您的会话"),
 
 
 

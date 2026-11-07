@@ -1,9 +1,12 @@
 package com.driedfish.project_psychology_health_assist.AIService;
 
+import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
+import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
+import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
 import org.springframework.ai.chat.client.ChatClient;
@@ -16,6 +19,7 @@ import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
+import org.springframework.transaction.annotation.Transactional;
 import reactor.core.publisher.Flux;
 
 import java.util.ArrayList;
@@ -122,10 +126,24 @@ public class PsychologicalSupportService {
     }
     //获取sessionId
     public Long extractSessionId(String sessionId) {
-        if(sessionId!=null&&sessionId.startsWith("session_")){
-            String sessionIdStr = sessionId.substring("session_".length());
-            return Long.parseLong(sessionIdStr);
+//
+        if(sessionId==null||!sessionId.startsWith("session_")){
+            throw new BusinessException(ResultCode.SESSION_ID_FORMAT_ERROR);
         }
-        return null;
+        String sessionIdStr = sessionId.substring("session_".length());
+        //验证sessionId是否为数字
+        if(!sessionIdStr.matches("\\d+")){
+            throw new BusinessException(ResultCode.SESSION_ID_FORMAT_ERROR);
+        }
+        return Long.parseLong(sessionIdStr);
     }
+    //删除会话
+    @Transactional(rollbackFor = Exception.class)
+    public void deleteSession(String sessionId,Long userId) {
+        Long dbSessionId = extractSessionId(sessionId);
+        consultationSessionService.deleteSession(dbSessionId,userId);
+        consultationMessageService.deleteMessagesBySessionId(dbSessionId);
+    }
+
+
 }
