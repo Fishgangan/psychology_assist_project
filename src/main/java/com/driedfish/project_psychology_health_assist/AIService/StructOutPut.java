@@ -11,7 +11,7 @@ public class StructOutPut {
                                     String initialMessage,
                                     Long startTime,
                                     Long expiryTime,
-                                    Integer messageCount,
+                                    Long messageCount,
                                     String status) {}
     public record StreamChatSessionList(List<StreamChatSession> sessions,Long total) {}
     public record StreamChatMessageList(List<ConsultationMessage> messages, Long total) {}

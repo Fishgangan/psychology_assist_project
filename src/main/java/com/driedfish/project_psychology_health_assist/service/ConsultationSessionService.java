@@ -7,6 +7,7 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.driedfish.project_psychology_health_assist.AIService.PsychologicalSupportService;
 import com.driedfish.project_psychology_health_assist.AIService.StructOutPut;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
+import com.driedfish.project_psychology_health_assist.common.DTO.response.SessionMessageCountDTO;
 import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
@@ -21,6 +22,9 @@ import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 import java.time.ZoneOffset;
 import java.util.List;
+import java.util.Map;
+import java.util.Objects;
+import java.util.stream.Collectors;
 
 @Service
 public class ConsultationSessionService {
@@ -53,8 +57,9 @@ public class ConsultationSessionService {
             throw new BusinessException(ResultCode.USER_NOT_EXIST);
         }
 
-
-}public void deleteSession(Long sessionId,Long userId) {
+    }
+    //删除会话
+    public void deleteSession(Long sessionId,Long userId) {
         ConsultationSession session = consultationSessionMapper.selectById(sessionId);
         if (session == null) {
             throw new BusinessException(ResultCode.SESSION_NOT_EXIST);
@@ -63,8 +68,9 @@ public class ConsultationSessionService {
             throw new BusinessException(ResultCode.SESSION_NOT_PERMISSION);}
         consultationSessionMapper.deleteById(sessionId);
     }
+    //查询所有会话
 public StructOutPut.StreamChatSessionList getSessionList(int pageNum, int pageSize, Long userId) {
-        //查询所有会话
+
 
         //分页查询
         if(pageSize>100){
@@ -77,13 +83,35 @@ public StructOutPut.StreamChatSessionList getSessionList(int pageNum, int pageSi
         //查询会话
         //根据用户ID查询会话
         LambdaQueryWrapper<ConsultationSession> queryWrapper = new LambdaQueryWrapper<>();
-        queryWrapper.eq(ConsultationSession::getUserId, userId);
+        queryWrapper.eq(ConsultationSession::getUserId, userId)
+                .orderByAsc(ConsultationSession::getStartedAt);
         Page<ConsultationSession> resultPage = consultationSessionMapper.selectPage(page, queryWrapper);
         //返回分页结果
         List<ConsultationSession> sessionList = resultPage.getRecords();
+        //如果会话列表为空，直接空返回,避免sql in 语句空值问题
+        if(sessionList.isEmpty()){
+            return new StructOutPut.StreamChatSessionList(
+                    List.of(),
+                    0L);
+        }
+        //批量查询会话的消息数量
+        List<Long> sessionIds=sessionList
+                .stream()
+                .map(ConsultationSession::getId)
+                .filter(Objects::nonNull)
+                .toList();
+        List<SessionMessageCountDTO> msgCountList=consultationMessageMapper.getSessionMessageCounts(sessionIds);
+        //利用Map根据会话ID查询消息数量
+        Map<Long,Long> msgCountMap=msgCountList.stream()
+                .collect(Collectors.toMap(
+                        SessionMessageCountDTO::getSessionId,
+                        SessionMessageCountDTO::getCnt,
+                        //如果会话ID重复，取第一个值(防止脏数据问题)
+                        (a,b)->a));
         List<StructOutPut.StreamChatSession> volist = sessionList.stream()
                 .map(session -> {
-                    Long msgCount=consultationMessageMapper.selectCount(new LambdaQueryWrapper<ConsultationMessage>().eq(ConsultationMessage::getSessionId, session.getId()));
+                    //N+1查询优化
+                    //Long msgCount=consultationMessageMapper.selectCount(new LambdaQueryWrapper<ConsultationMessage>().eq(ConsultationMessage::getSessionId, session.getId()));
                     return new StructOutPut.StreamChatSession(
                         "session_"+session.getId().toString(),
                         userId,
@@ -91,7 +119,7 @@ public StructOutPut.StreamChatSessionList getSessionList(int pageNum, int pageSi
                         //转换为东八区时间戳
                         session.getStartedAt().toInstant(ZoneOffset.ofHours(8)).toEpochMilli(),
                         session.getStartedAt().plusDays(1).toInstant(ZoneOffset.ofHours(8)).toEpochMilli(),
-                        msgCount.intValue(),
+                        msgCountMap.getOrDefault(session.getId(),0L),
                         "active")
                 ;}).toList();
         return new StructOutPut.StreamChatSessionList(
@@ -99,6 +127,7 @@ public StructOutPut.StreamChatSessionList getSessionList(int pageNum, int pageSi
                 resultPage.getTotal());
 
     }
+    //查询会话所有消息
     public StructOutPut.StreamChatMessageList getMessages(String sessionId, Long userId,int pageNum, int pageSize) {
         Long sessionIdLong = extractSessionId(sessionId);
         //验证会话是否存在

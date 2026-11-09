@@ -27,3 +27,9 @@ jwt:
   refresh-expiration: 604800000 #7天
   header: Authorization #token头部名称
   token-prefix: "Bearer " #token前缀
+mybatis-plus:
+  configuration:
+    map-underscore-to-camel-case: true
+logging:
+  level:
+    ConsultationMessageMapper: debug

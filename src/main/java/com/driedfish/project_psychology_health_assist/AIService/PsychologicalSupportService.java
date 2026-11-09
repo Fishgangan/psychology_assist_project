@@ -50,7 +50,7 @@ public class PsychologicalSupportService {
                 createDTO.getInitialMessage(),
                 System.currentTimeMillis(),
                 System.currentTimeMillis()+86400000L,//会话过期时间24h
-                1,
+                1L,
                 "ACTIVE"
 
         );
@@ -60,11 +60,6 @@ public class PsychologicalSupportService {
     public Flux<String> streamPsychologicalChat(String sessionId,String userMessage) {
         //创建响应流
         return Flux.create(sink->{
-            // 模拟异步处理
-//            sink.next("响应消息1");
-//            sink.next("响应消息2");
-//            sink.complete();//完成流
-//            sink.error
             Long dbSessionId = extractSessionId(sessionId);
             if(dbSessionId==null){
                 sink.error(new RuntimeException("会话ID格式错误"));
