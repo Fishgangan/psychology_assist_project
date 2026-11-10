@@ -5,6 +5,7 @@ import com.driedfish.project_psychology_health_assist.common.DTO.response.Consul
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
 import com.driedfish.project_psychology_health_assist.mapper.ConsultationMessageMapper;
+import com.driedfish.project_psychology_health_assist.service.convert.MessageConvert;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
@@ -54,30 +55,13 @@ public class ConsultationMessageService {
                 .orderByDesc(ConsultationMessage::getCreatedAt)
                 .last("limit 1");
         ConsultationMessage lastMessage = consultationMessageMapper.selectOne(queryWrapper);
-        return lastMessage!=null? convertToResponseDTO(lastMessage):null;
+        return lastMessage!=null? MessageConvert.convertToResponseDTO(lastMessage):null;
 
 
 
     }
-    //将消息实体转换为响应DTO
-    public ConsultationMessageResponseDTO convertToResponseDTO(ConsultationMessage message) {
-        if(message == null) {
-            return null;
-        }
-        return ConsultationMessageResponseDTO.builder()
-                .id(message.getId())
-                .sessionId(message.getSessionId())
-                .senderType(message.getSenderType())
-                .senderTypeDesc(message.getSenderTypeDesc())
-                .messageType(message.getMessageType())
-                .messageTypeDesc(message.getMessageTypeDesc())
-                .content(message.getContent())
-                .emotionTag(message.getEmotionTag())
-                .aiModel(message.getAiModel())
-                .createdAt(message.getCreatedAt())
-                .contentLength(message.getContent().length())
-                .build();
-    }
+
+
     //删除会话所有消息
     public void deleteMessagesBySessionId(Long sessionId) {
         LambdaQueryWrapper<ConsultationMessage> queryWrapper = new LambdaQueryWrapper<>();

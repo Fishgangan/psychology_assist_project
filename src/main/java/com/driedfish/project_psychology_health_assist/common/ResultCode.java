@@ -38,6 +38,7 @@ public enum ResultCode {
 
 
 
+
     // token相关错误
     TOKEN_INVALID("A0230", "token无效"),
     TOKEN_EXPIRED("A0230", "token已过期"),

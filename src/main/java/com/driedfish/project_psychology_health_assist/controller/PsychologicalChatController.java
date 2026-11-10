@@ -5,13 +5,16 @@ import com.auth0.jwt.interfaces.DecodedJWT;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.driedfish.project_psychology_health_assist.AIService.PsychologicalSupportService;
 import com.driedfish.project_psychology_health_assist.AIService.StructOutPut;
+import com.driedfish.project_psychology_health_assist.annotation.CheckSessionOwner;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationStreamDTO;
 import com.driedfish.project_psychology_health_assist.common.Result;
 import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
 import com.driedfish.project_psychology_health_assist.util.JwtTokenUtil;
+import com.driedfish.project_psychology_health_assist.util.SecurityUtils;
 import jakarta.validation.Valid;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
@@ -21,7 +24,7 @@ import reactor.core.publisher.Flux;
 import java.time.Duration;
 import java.util.List;
 import java.util.Map;
-
+@Slf4j
 @RestController
 @RequestMapping("/api/psychological-chat")
 public class PsychologicalChatController {
@@ -29,13 +32,11 @@ public class PsychologicalChatController {
     private PsychologicalSupportService psychologicalSupportService;
     @Autowired
     private ConsultationSessionService consultationSessionService;
-
+    //创建会话
     @PostMapping("/session/start")
     public Result<StructOutPut.StreamChatSession> startSession(@Valid @RequestBody ConsultationSessionCreateDTO createDTO){
         //获取当前用户
-        String token= JwtTokenUtil.getCurrentToken();
-        DecodedJWT jwt = JwtTokenUtil.verifyToken(token);
-        Long userId = jwt.getClaim("userId").asLong();
+        Long userId = SecurityUtils.getUserId();
         StructOutPut.StreamChatSession session = psychologicalSupportService.startSession(userId,createDTO);
 
         return Result.success(session);
@@ -43,24 +44,24 @@ public class PsychologicalChatController {
 
     }
     //流式返回聊天结果
+
+    @CheckSessionOwner
     @PostMapping(value="/stream",produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> streamChat(@Valid @RequestBody ConsultationStreamDTO streamDTO){
-        //获取当前用户
-        String token= JwtTokenUtil.getCurrentToken();
-        DecodedJWT jwt = JwtTokenUtil.verifyToken(token);
-        Long userId = jwt.getClaim("userId").asLong();
-        if(userId==null){
-            return Flux.just(ServerSentEvent.<String>builder()
-                    .event("error")
-                    .data(JSONUtil.toJsonStr(Result.error(ResultCode.UNAUTHORIZED)))
-                    .build());
-        }
         return psychologicalSupportService.streamPsychologicalChat(streamDTO.getSessionId(),streamDTO.getUserMessage())
-                .map(Fragment->{
+                .map(fragment->{
                     return ServerSentEvent.<String>builder()
                             .event("message")
-                            .data(JSONUtil.toJsonStr(Result.success(Map.of("content",Fragment,"type","normal")))).build();
+                            .data(JSONUtil.toJsonStr(Result.success(Map.of("content",fragment,"type","normal")))).build();
                 })
+                //ai中途处理异常
+                .onErrorResume(error->{
+                    //打印异常信息
+                    log.error("ai中途处理异常",error);
+                    return Flux.just(ServerSentEvent.<String>builder()
+                        .event("error")
+                        .data(JSONUtil.toJsonStr(Result.error(ResultCode.SYSTEM_ERROR)))
+                        .build());})
                 .concatWith(Flux.just(ServerSentEvent.<String>builder()
                         .event("done")
                         .data("{}")
@@ -69,16 +70,15 @@ public class PsychologicalChatController {
 
 }   
     //删除对话
+    @CheckSessionOwner
     @DeleteMapping("/sessions/{sessionId}")
     public Result<String> deleteSession(@PathVariable String sessionId){
         //获取当前用户
-        String token= JwtTokenUtil.getCurrentToken();
-        DecodedJWT jwt = JwtTokenUtil.verifyToken(token);
-        Long userId = jwt.getClaim("userId").asLong();
+        Long userId = SecurityUtils.getUserId();
         if(userId==null){
             return Result.error(ResultCode.UNAUTHORIZED);
         }
-        psychologicalSupportService.deleteSession(sessionId,userId);
+        psychologicalSupportService.deleteSession(sessionId);
         return Result.success("对话删除成功");
     }
 
@@ -86,9 +86,8 @@ public class PsychologicalChatController {
     //分页获取对话列表
     @GetMapping("/sessions")
     public Result<StructOutPut.StreamChatSessionList> getSessionList(@RequestParam int pageNum, @RequestParam int pageSize){
-        String token= JwtTokenUtil.getCurrentToken();
-        DecodedJWT jwt = JwtTokenUtil.verifyToken(token);
-        Long userId = jwt.getClaim("userId").asLong();
+        //获取当前用户
+        Long userId = SecurityUtils.getUserId();
         if(userId==null){
             return Result.error(ResultCode.UNAUTHORIZED);
         }
@@ -99,15 +98,14 @@ public class PsychologicalChatController {
     }
 
     //获取对话消息列表
+    @CheckSessionOwner
     @GetMapping("/session/{sessionId}/messages")
     public Result<StructOutPut.StreamChatMessageList> getMessages(@PathVariable String sessionId,@RequestParam int pageNum, @RequestParam int pageSize){
         //获取当前用户
-        String token= JwtTokenUtil.getCurrentToken();
-        DecodedJWT jwt = JwtTokenUtil.verifyToken(token);
-        Long userId = jwt.getClaim("userId").asLong();
+        Long userId = SecurityUtils.getUserId();
         if(userId==null){
             return Result.error(ResultCode.UNAUTHORIZED);
         }
-        return Result.success(consultationSessionService.getMessages(sessionId,userId,pageNum,pageSize));
+        return Result.success(consultationSessionService.getMessages(sessionId,pageNum,pageSize));
     }
 }

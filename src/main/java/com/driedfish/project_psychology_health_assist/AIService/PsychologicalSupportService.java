@@ -9,6 +9,7 @@ import com.driedfish.project_psychology_health_assist.common.entity.Consultation
 import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
+import com.driedfish.project_psychology_health_assist.util.SessionUtils;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -60,11 +61,7 @@ public class PsychologicalSupportService {
     public Flux<String> streamPsychologicalChat(String sessionId,String userMessage) {
         //创建响应流
         return Flux.create(sink->{
-            Long dbSessionId = extractSessionId(sessionId);
-            if(dbSessionId==null){
-                sink.error(new RuntimeException("会话ID格式错误"));
-                return;
-            }
+            Long dbSessionId = SessionUtils.extractSessionId(sessionId);
             //是否是初始消息
             boolean isInitialMessage=false;
             //检查会话是否存在，避免重复保存
@@ -119,24 +116,12 @@ public class PsychologicalSupportService {
 
         });
     }
-    //获取sessionId
-    public Long extractSessionId(String sessionId) {
-//
-        if(sessionId==null||!sessionId.startsWith("session_")){
-            throw new BusinessException(ResultCode.SESSION_ID_FORMAT_ERROR);
-        }
-        String sessionIdStr = sessionId.substring("session_".length());
-        //验证sessionId是否为数字
-        if(!sessionIdStr.matches("\\d+")){
-            throw new BusinessException(ResultCode.SESSION_ID_FORMAT_ERROR);
-        }
-        return Long.parseLong(sessionIdStr);
-    }
+
     //删除会话
     @Transactional(rollbackFor = Exception.class)
-    public void deleteSession(String sessionId,Long userId) {
-        Long dbSessionId = extractSessionId(sessionId);
-        consultationSessionService.deleteSession(dbSessionId,userId);
+    public void deleteSession(String sessionId) {
+        Long dbSessionId = SessionUtils.extractSessionId(sessionId);
+        consultationSessionService.deleteSession(dbSessionId);
         consultationMessageService.deleteMessagesBySessionId(dbSessionId);
     }
 

@@ -51,8 +51,8 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
                 if(user!=null&& UserStatus.NORMAL.getCode().equals(user.getStatus())){
                    //创建spring Security认证对象
                     List<SimpleGrantedAuthority> authorities=Collections.singletonList(new SimpleGrantedAuthority("ROLE_"+resultJwtTokenUtil.getRoleType()));
-                    //创建UsernamePasswordAuthenticationToken对象
-                    UsernamePasswordAuthenticationToken authenticationToken =new UsernamePasswordAuthenticationToken(resultJwtTokenUtil.getUsername(), null, authorities);
+                    //创建UsernamePasswordAuthenticationToken对象(认证凭证)（principal,credentials,authorities）
+                    UsernamePasswordAuthenticationToken authenticationToken =new UsernamePasswordAuthenticationToken(resultJwtTokenUtil.getUserId(), null, authorities);
                     //设置认证信息到Spring Security上下文对象
                     SecurityContextHolder.getContext().setAuthentication(authenticationToken);
                     //token存储到请求属性中

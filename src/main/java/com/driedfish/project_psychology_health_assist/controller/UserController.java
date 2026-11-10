@@ -5,8 +5,10 @@ import com.driedfish.project_psychology_health_assist.common.DTO.command.LoginCo
 import com.driedfish.project_psychology_health_assist.common.DTO.command.RegisterCommandDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.UserLoginResponseDTO;
 import com.driedfish.project_psychology_health_assist.common.Result;
+import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.service.UserService;
 import com.driedfish.project_psychology_health_assist.util.JwtTokenUtil;
+import com.driedfish.project_psychology_health_assist.util.SecurityUtils;
 import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
 import org.springframework.web.bind.annotation.*;
@@ -31,9 +33,11 @@ public class UserController {
     //获取当前用户信息
     @GetMapping("/current")
     public Result<UserLoginResponseDTO.UserDetailResponseDTO> getCurrentUser() {
-        String token = JwtTokenUtil.getCurrentToken();
-        DecodedJWT jwt = JwtTokenUtil.verifyToken(token);
-        Long userId = jwt.getClaim("userId").asLong();
+        //获取当前用户
+        Long userId = SecurityUtils.getUserId();
+        if(userId==null){
+            return Result.error(ResultCode.UNAUTHORIZED);
+        }
         UserLoginResponseDTO.UserDetailResponseDTO userDetailResponseDTO = userService.getUserById(userId);
         return Result.success(userDetailResponseDTO);
     }
