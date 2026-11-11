@@ -2,10 +2,13 @@ package com.driedfish.project_psychology_health_assist.common;
 
 import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 import lombok.extern.slf4j.Slf4j;
+import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
+import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
@@ -29,6 +32,12 @@ public class GlobalExceptionHandler {
             return Result.error(e.getCode(),e.getMessage(), null);
         }
     }
+    //用户主动断开连接
+    @ExceptionHandler(value = {ClientAbortException.class,AsyncRequestNotUsableException.class})
+    public void handleClientAbortException(Exception e){
+        log.error("用户网络断开:{}",e.getMessage());
+    }
+    //兜底异常
     @ExceptionHandler(Exception.class)
     public Result<?> handleException(Exception e){
         log.error("出现未知异常",e);

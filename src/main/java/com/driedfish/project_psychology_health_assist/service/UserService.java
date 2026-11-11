@@ -13,16 +13,16 @@ import com.driedfish.project_psychology_health_assist.common.exception.BusinessE
 import com.driedfish.project_psychology_health_assist.mapper.UserMapper;
 import com.driedfish.project_psychology_health_assist.service.convert.UserConvert;
 import com.driedfish.project_psychology_health_assist.util.JwtTokenUtil;
-import jakarta.annotation.Resource;
-import jakarta.servlet.http.HttpServletRequest;
+import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;
 import org.springframework.util.StringUtils;
 
 @Service
+@RequiredArgsConstructor
 public class UserService {
-    @Resource
-    private UserMapper userMapper;
+    private final JwtTokenUtil jwtTokenUtil;
+    private final UserMapper userMapper;
 
     private final BCryptPasswordEncoder passwordEncoder = new BCryptPasswordEncoder();
     //用户登录
@@ -44,7 +44,7 @@ public class UserService {
             throw new BusinessException(ResultCode.USER_DISABLED);
         }
         //生成token
-        String token = JwtTokenUtil.generateJwtToken(user.getId(), user.getUsername(), user.getUserType());
+        String token = jwtTokenUtil.generateJwtToken(user.getId(), user.getUsername(), user.getUserType());
         UserLoginResponseDTO.UserDetailResponseDTO userInfo = UserConvert.entityToDetailResponse(user);
         return UserConvert.entityToLoginResponse(token, userInfo);
     }
@@ -94,7 +94,7 @@ public class UserService {
         if (!StringUtils.hasText(token)) {
             throw new BusinessException(ResultCode.TOKEN_NOT_BLANKED);
         }
-        JwtTokenUtil.invalidateToken(token);
+        jwtTokenUtil.invalidateToken(token);
     }
 
 }

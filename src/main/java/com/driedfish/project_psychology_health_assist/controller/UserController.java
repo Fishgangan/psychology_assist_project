@@ -9,15 +9,16 @@ import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.service.UserService;
 import com.driedfish.project_psychology_health_assist.util.JwtTokenUtil;
 import com.driedfish.project_psychology_health_assist.util.SecurityUtils;
-import jakarta.annotation.Resource;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import org.springframework.web.bind.annotation.*;
 
 @RestController
 @RequestMapping("api/user")
+@RequiredArgsConstructor
 public class UserController {
-    @Resource
-    private UserService userService;
+    private final UserService userService;
+    private final JwtTokenUtil jwtTokenUtil;
     //用户登录
     @PostMapping("/login")
     public Result<UserLoginResponseDTO> login(@Valid @RequestBody LoginCommandDTO dto) {
@@ -44,7 +45,7 @@ public class UserController {
     //用户登出
     @PostMapping("/logout")
     public Result<String> logout() {
-        String token = JwtTokenUtil.getCurrentToken();
+        String token = jwtTokenUtil.getCurrentToken();
         userService.logout(token);
         return Result.success("登出成功");
     }

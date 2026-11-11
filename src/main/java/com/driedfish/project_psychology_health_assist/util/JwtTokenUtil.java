@@ -9,6 +9,8 @@ import com.driedfish.project_psychology_health_assist.common.exception.BusinessE
 import com.driedfish.project_psychology_health_assist.config.JwtConfig;
 import jakarta.servlet.http.HttpServletRequest;
 import lombok.Getter;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.ApplicationContext;
 import org.springframework.context.ApplicationContextAware;
 import org.springframework.data.redis.core.StringRedisTemplate;
@@ -20,25 +22,16 @@ import org.springframework.web.context.request.ServletRequestAttributes;
 import java.util.Date;
 import java.util.concurrent.TimeUnit;
 @Component
-public class JwtTokenUtil implements ApplicationContextAware {
+@RequiredArgsConstructor
+@Slf4j
+public class JwtTokenUtil {
     private static final String ISSUER = "mental_health_assist";
     //黑名单key前缀
     private static final String TOKEN_BLACKLIST_PREFIX = "jwt:blacklist:";
-    // 从applicationContext(ioc容器)中获取JwtConfig,从ioc容器中获取JwtConfig的实例bean
-    private static ApplicationContext applicationContext;
-    @Override
-    public void setApplicationContext(ApplicationContext applicationContext) {
-        JwtTokenUtil.applicationContext = applicationContext;
-    }
-    private static JwtConfig getJwtConfig() {
-        return applicationContext.getBean(JwtConfig.class);
-    }
-    private static StringRedisTemplate getStringRedisTemplate() {
-        return applicationContext.getBean(StringRedisTemplate.class);
-    }
-    public static String generateJwtToken(Long userId,String username, Integer roleType) {
-        try{//jwt配置
-            JwtConfig jwtConfig = getJwtConfig();
+    private final StringRedisTemplate stringRedisTemplate;
+    private final JwtConfig jwtConfig;
+    public String generateJwtToken(Long userId,String username, Integer roleType) {
+        try{
             //生成签名算法
             Algorithm algorithm=Algorithm.HMAC256(jwtConfig.getSecret());
             //过期时间
@@ -54,13 +47,14 @@ public class JwtTokenUtil implements ApplicationContextAware {
                     .sign(algorithm);
             return token;}
         catch (Exception e){
-            throw new RuntimeException("生成token失败："+e);
+            log.error("token生成失败,请检查jwt配置是否正确",e);
+            throw new BusinessException(ResultCode.SYSTEM_ERROR);
         }
 
 
     }
     // 提取token
-    public static String extractTokenFromRequest(HttpServletRequest request) {
+    public String extractTokenFromRequest(HttpServletRequest request) {
         if(request==null){
             return null;
         }
@@ -71,7 +65,7 @@ public class JwtTokenUtil implements ApplicationContextAware {
         return null;
     }
     //验证token
-    public static TokenVerifyResult validateToken(String token){
+    public TokenVerifyResult validateToken(String token){
         try{DecodedJWT decodedJWT=verifyToken(token);
             if(decodedJWT==null){
                 return new TokenVerifyResult(null,null,null,false);
@@ -98,7 +92,7 @@ public class JwtTokenUtil implements ApplicationContextAware {
 
     }
         //获取当前token
-    public static String getCurrentToken(){
+    public String getCurrentToken(){
         ServletRequestAttributes attributes = (ServletRequestAttributes) RequestContextHolder.getRequestAttributes();
         if(attributes!=null){
             HttpServletRequest request=attributes.getRequest();
@@ -115,12 +109,11 @@ public class JwtTokenUtil implements ApplicationContextAware {
         return null;
     }
         //验证token有效性
-    public static DecodedJWT verifyToken(String token){
+    public DecodedJWT verifyToken(String token){
         if(!StringUtils.hasText(token)){
             throw new JWTVerificationException("token不能为空");
         }
         //解密token,获取token中的信息
-        JwtConfig jwtConfig = getJwtConfig();
         Algorithm algorithm=Algorithm.HMAC256(jwtConfig.getSecret());
         JWTVerifier verifier=JWT.require(algorithm)
                 .withIssuer(ISSUER)
@@ -129,30 +122,30 @@ public class JwtTokenUtil implements ApplicationContextAware {
 
     }
     //注销token:把token写入Redis黑名单,过期时间与token剩余有效期一致
-    public static void invalidateToken(String token) {
+    public void invalidateToken(String token) {
         if (!StringUtils.hasText(token)) {
             throw new JWTVerificationException("token不能为空");
         }
         DecodedJWT decodedJWT = verifyToken(token);
         long expireAt = decodedJWT.getExpiresAt() == null
-                ? System.currentTimeMillis() + getJwtConfig().getExpiration()
+                ? System.currentTimeMillis() + jwtConfig.getExpiration()
                 : decodedJWT.getExpiresAt().getTime();
         long ttl = expireAt - System.currentTimeMillis();
         if (ttl <= 0) {
             //token已过期,无需写入黑名单
             return;
         }
-        getStringRedisTemplate().opsForValue()
+        stringRedisTemplate.opsForValue()
                 .set(TOKEN_BLACKLIST_PREFIX + token, "1", ttl, TimeUnit.MILLISECONDS);
     }
 
     //判断token是否已被注销(黑名单中存在)
-    public static boolean isTokenBlocked(String token) {
+    public boolean isTokenBlocked(String token) {
         if (!StringUtils.hasText(token)) {
             return false;
         }
         return Boolean.TRUE.equals(
-                getStringRedisTemplate().hasKey(TOKEN_BLACKLIST_PREFIX + token));
+                stringRedisTemplate.hasKey(TOKEN_BLACKLIST_PREFIX + token));
     }
 
     //token返回结果封装

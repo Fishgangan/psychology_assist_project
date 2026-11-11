@@ -14,6 +14,7 @@ import com.driedfish.project_psychology_health_assist.service.ConsultationSessio
 import com.driedfish.project_psychology_health_assist.util.JwtTokenUtil;
 import com.driedfish.project_psychology_health_assist.util.SecurityUtils;
 import jakarta.validation.Valid;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
@@ -27,11 +28,10 @@ import java.util.Map;
 @Slf4j
 @RestController
 @RequestMapping("/api/psychological-chat")
+@RequiredArgsConstructor
 public class PsychologicalChatController {
-    @Autowired
-    private PsychologicalSupportService psychologicalSupportService;
-    @Autowired
-    private ConsultationSessionService consultationSessionService;
+    private final PsychologicalSupportService psychologicalSupportService;
+    private final ConsultationSessionService consultationSessionService;
     //创建会话
     @PostMapping("/session/start")
     public Result<StructOutPut.StreamChatSession> startSession(@Valid @RequestBody ConsultationSessionCreateDTO createDTO){

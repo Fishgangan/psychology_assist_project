@@ -6,13 +6,14 @@ import com.driedfish.project_psychology_health_assist.common.entity.Consultation
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
 import com.driedfish.project_psychology_health_assist.mapper.ConsultationMessageMapper;
 import com.driedfish.project_psychology_health_assist.service.convert.MessageConvert;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 import java.time.LocalDateTime;
 @Service
+@RequiredArgsConstructor
 public class ConsultationMessageService {
-    @Autowired
-    private ConsultationMessageMapper consultationMessageMapper;
+    private final ConsultationMessageMapper consultationMessageMapper;
     //保存用户消息
     public ConsultationMessage saveUserMessage(Long sessionId, String content,String emotion_tag) {
         //构建用户消息实体

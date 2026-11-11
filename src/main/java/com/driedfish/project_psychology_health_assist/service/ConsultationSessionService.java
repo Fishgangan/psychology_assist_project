@@ -17,6 +17,7 @@ import com.driedfish.project_psychology_health_assist.mapper.ConsultationMessage
 import com.driedfish.project_psychology_health_assist.mapper.ConsultationSessionMapper;
 import com.driedfish.project_psychology_health_assist.mapper.UserMapper;
 import com.driedfish.project_psychology_health_assist.util.SessionUtils;
+import lombok.RequiredArgsConstructor;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
@@ -28,13 +29,11 @@ import java.util.Objects;
 import java.util.stream.Collectors;
 
 @Service
+@RequiredArgsConstructor
 public class ConsultationSessionService {
-    @Autowired
-    private UserMapper userMapper;
-    @Autowired
-    private ConsultationSessionMapper consultationSessionMapper;
-    @Autowired
-    private ConsultationMessageMapper consultationMessageMapper;
+    private final UserMapper userMapper;
+    private final ConsultationSessionMapper consultationSessionMapper;
+    private final ConsultationMessageMapper consultationMessageMapper;
     //创建会话
     public ConsultationSession createSession(Long userId, ConsultationSessionCreateDTO createDTO) {
         //验证用户是否存在

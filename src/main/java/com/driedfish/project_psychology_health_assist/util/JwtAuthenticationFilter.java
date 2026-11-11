@@ -5,24 +5,28 @@ import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.config.SecurityConfig;
 import com.driedfish.project_psychology_health_assist.enumClass.UserStatus;
 import com.driedfish.project_psychology_health_assist.service.UserService;
-import jakarta.annotation.Resource;
 import jakarta.servlet.FilterChain;
 import jakarta.servlet.ServletException;
 import jakarta.servlet.http.HttpServletRequest;
 import jakarta.servlet.http.HttpServletResponse;
+import lombok.RequiredArgsConstructor;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.authentication.UsernamePasswordAuthenticationToken;
 import org.springframework.security.core.authority.SimpleGrantedAuthority;
 import org.springframework.security.core.context.SecurityContextHolder;
+import org.springframework.stereotype.Component;
 import org.springframework.util.StringUtils;
 import org.springframework.web.filter.OncePerRequestFilter;
 
 import java.io.IOException;
 import java.util.Collections;
 import java.util.List;
-
+@Slf4j
+@RequiredArgsConstructor
+@Component
 public class JwtAuthenticationFilter extends OncePerRequestFilter {
-    @Resource
-    private UserService userService;
+    private final UserService userService;
+    private final JwtTokenUtil jwtTokenUtil;
     @Override
     protected boolean shouldNotFilter(HttpServletRequest request){
         String requestURI = request.getRequestURI();
@@ -36,15 +40,20 @@ public class JwtAuthenticationFilter extends OncePerRequestFilter {
         String requestURI = request.getRequestURI();
         String method = request.getMethod();
         //获取请求头中的token
-        String token = JwtTokenUtil.extractTokenFromRequest(request);
+        String token = jwtTokenUtil.extractTokenFromRequest(request);
         if(StringUtils.hasText(token)){
             //已注销的token直接拒绝
-            if(JwtTokenUtil.isTokenBlocked(token)){
+            //redis连不上时的降级处理
+            try{
+            if(jwtTokenUtil.isTokenBlocked(token)){
                 clearSecurityContext();
                 ResponseUtil.writeError(response, ResultCode.TOKEN_BLOCKED);
                 return;
+            }}
+            catch (Exception e){
+                log.error("redis连接异常,无法进行token黑名单校验，进行降级处理，暂时放行请求",e.getMessage());
             }
-            JwtTokenUtil.TokenVerifyResult resultJwtTokenUtil=JwtTokenUtil.validateToken(token);
+            JwtTokenUtil.TokenVerifyResult resultJwtTokenUtil=jwtTokenUtil.validateToken(token);
             if(resultJwtTokenUtil.isValid()){
                 //查询用户状态
                 UserLoginResponseDTO.UserDetailResponseDTO user=userService.getUserById(resultJwtTokenUtil.getUserId());

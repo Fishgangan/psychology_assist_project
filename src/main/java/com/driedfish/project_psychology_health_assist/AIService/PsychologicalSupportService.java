@@ -10,6 +10,7 @@ import com.driedfish.project_psychology_health_assist.common.exception.BusinessE
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
 import com.driedfish.project_psychology_health_assist.util.SessionUtils;
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
@@ -21,11 +22,16 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
+import org.springframework.util.StringUtils;
 import reactor.core.publisher.Flux;
+import reactor.core.publisher.Mono;
+import reactor.core.publisher.SignalType;
+import reactor.core.scheduler.Schedulers;
 
+import java.io.IOException;
 import java.util.ArrayList;
 import java.util.List;
-
+@Slf4j
 @Service
 public class PsychologicalSupportService {
     @Qualifier("open-ai")
@@ -59,9 +65,10 @@ public class PsychologicalSupportService {
 
     }
     public Flux<String> streamPsychologicalChat(String sessionId,String userMessage) {
-        //创建响应流
-        return Flux.create(sink->{
-            Long dbSessionId = SessionUtils.extractSessionId(sessionId);
+        Long dbSessionId = SessionUtils.extractSessionId(sessionId);
+        String conversationId="conversation_"+sessionId;
+        //用Mono.fromCallable创建响应流 把SQL操作放到Callable中，防止阻塞主线程，导致响应延迟
+        return Mono.fromCallable(()->{
             //是否是初始消息
             boolean isInitialMessage=false;
             //检查会话是否存在，避免重复保存
@@ -76,45 +83,61 @@ public class PsychologicalSupportService {
                 //保存用户消息到Message表
                  consultationMessageService.saveUserMessage(dbSessionId, userMessage, null);
 
-
             }
-            //流式响应AI助手消息
-            //生成对话记忆管理
-            String conversationId="conversation_"+sessionId;
-            //构建系统提示
+            //把用户消息添加到对话记忆管理
             List<Message> userMessages=new ArrayList<>();
             userMessages.add(new UserMessage(userMessage));
             chatMemory.add(conversationId,userMessages);
-            Prompt prompt = new Prompt(List.of(
-                    new SystemMessage(PromptManage.PSYCHOLOGICAL_SUPPORT_SYSTEM_PROMPT)));
-            //存储ai完整响应
-            StringBuilder aiResponse=new StringBuilder();
-            //调用AI助手
-            chatClient.prompt(prompt)
-                    .user(userMessage)
-                    .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID,conversationId))
-                    .stream()
-                    .content()
-                    .doOnNext(Fragment->{
-                        aiResponse.append(Fragment);
-                        sink.next(Fragment);
-                    })
-                    .doOnComplete(()->{
-                        String completeRes=aiResponse.toString();
-                        consultationMessageService.saveAiMessage(dbSessionId, completeRes, "open-ai");
-                        //添加ai助手消息到对话记忆管理
-                        List<Message> aiMessages=new ArrayList<>();
-                        aiMessages.add(new AssistantMessage(completeRes));
-                        chatMemory.add(conversationId,aiMessages);
-                        sink.complete();
-                    })
-                    .doOnError(sink::error)
-                    .subscribe();//订阅并启动流
+            return true;})//返回占位符，等待流处理
+            .subscribeOn(Schedulers.boundedElastic())
+                //用flatMapMany创建响应流
+                .flatMapMany(isReady ->{
+                    StringBuilder aiResponse=new StringBuilder();
+                    Prompt prompt =new Prompt(List.of(
+                            new SystemMessage(PromptManage.PSYCHOLOGICAL_SUPPORT_SYSTEM_PROMPT)));
+                    //调用AI助手
+                    return chatClient.prompt(prompt)
+                                .user(userMessage)
+                                .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID,conversationId))
+                                .stream()
+                                .content()
+                            // 处理流式响应
+                                .doOnNext(fragment-> aiResponse.append(fragment))
+                                .doOnComplete(()->{
+                                    String completeRes=aiResponse.toString();
+                                    if(StringUtils.hasText(completeRes)){
+                                        //用Mono.fromCallable创建响应流 把SQL操作放到Callable中，防止阻塞主线程，导致响应延迟
+                                        Mono.fromRunnable(()->{
+                                            consultationMessageService.saveAiMessage(dbSessionId, completeRes, "open-ai");
+                                            //添加ai助手消息到对话记忆管理
+                                            List<Message> aiMessages=new ArrayList<>();
+                                            aiMessages.add(new AssistantMessage(completeRes));
+                                            chatMemory.add(conversationId,aiMessages);
+                                        }).subscribeOn(Schedulers.boundedElastic())
+                                                .doOnError(error->{
+                                                    log.error("保存AI助手消息到Message表失败",error);
+                                                })
+                                                .subscribe();}})
 
 
+                                .doOnError(error->{
+                                    if(error instanceof IOException){
+                                        log.info("用户主动断开连接，关闭流");
+                                    }else{
+                                        log.error("AI助手调用失败",error);
+                                    }
+                                })
+                            //客户端断连时，关闭流
+                            .doFinally(signalType->{
+                                if(signalType==SignalType.CANCEL){
+                                    log.info("客户端断连，关闭流");
+                                } else if (signalType== SignalType.ON_COMPLETE) {
+                                    log.info("AI助手调用正常结束。sessionId={}",sessionId);
+                                }
+                            });
+                }  );
 
 
-        });
     }
 
     //删除会话

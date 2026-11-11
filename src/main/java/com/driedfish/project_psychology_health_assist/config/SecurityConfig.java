@@ -25,7 +25,7 @@ public class SecurityConfig {
         "/",
         "/api/user/login",
         "/api/user/add",
-    };
+        };
     public static Boolean isPublicPath(String requestURI){
         for(String path : PUBLIC_PATHS){
             if(antPathMatcher.match(requestURI, path)){
@@ -35,11 +35,7 @@ public class SecurityConfig {
         return false;
     }
     @Bean
-    public JwtAuthenticationFilter jwtAuthenticationFilter(){
-        return new JwtAuthenticationFilter();
-    }
-    @Bean
-    public SecurityFilterChain filterChain(HttpSecurity http) throws Exception{
+    public SecurityFilterChain filterChain(HttpSecurity http, JwtAuthenticationFilter jwtAuthenticationFilter) throws Exception{
         //通过httpSecurity配置安全过滤链
         http
                 // 关闭csrf保护（因为是无状态的api，所以不需要csrf保护）
@@ -52,7 +48,7 @@ public class SecurityConfig {
                 .requestMatchers(PUBLIC_PATHS).permitAll()
                 .anyRequest().authenticated() )
                 // 添加JWT认证过滤器
-                .addFilterBefore(jwtAuthenticationFilter(), UsernamePasswordAuthenticationFilter.class);
+                .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }
 }
