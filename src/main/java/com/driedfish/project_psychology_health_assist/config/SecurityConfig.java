@@ -1,7 +1,10 @@
 package com.driedfish.project_psychology_health_assist.config;
 
 import cn.hutool.core.text.AntPathMatcher;
+import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.util.JwtAuthenticationFilter;
+import com.driedfish.project_psychology_health_assist.util.ResponseUtil;
+import jakarta.servlet.DispatcherType;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 import org.springframework.security.config.annotation.method.configuration.EnableMethodSecurity;
@@ -25,6 +28,7 @@ public class SecurityConfig {
         "/",
         "/api/user/login",
         "/api/user/add",
+        "/error"
         };
     public static Boolean isPublicPath(String requestURI){
         for(String path : PUBLIC_PATHS){
@@ -44,10 +48,19 @@ public class SecurityConfig {
                 .sessionManagement((session)->{session.sessionCreationPolicy(SessionCreationPolicy.STATELESS);})
                 // 配置权限管理
                 .authorizeHttpRequests(auth->auth
+                // 底层错误请求通过，防止错误请求因无认证被拦截导致403错误
+                .dispatcherTypeMatchers(DispatcherType.ERROR,DispatcherType.ASYNC).permitAll()
                 // 无需认证
                 .requestMatchers(PUBLIC_PATHS).permitAll()
                 .anyRequest().authenticated() )
-                // 添加JWT认证过滤器
+                .exceptionHandling((exception)->exception.accessDeniedHandler((request, response, accessDeniedException)->{
+                    //客户端断连引发，不报错
+                    if(response.isCommitted()){
+                        return;
+                    }
+                    ResponseUtil.writeError(response, ResultCode.AUTHORIZED_ERROR);
+                }))
+                               // 添加JWT认证过滤器
                 .addFilterBefore(jwtAuthenticationFilter, UsernamePasswordAuthenticationFilter.class);
         return http.build();
     }

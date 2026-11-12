@@ -1,6 +1,7 @@
 package com.driedfish.project_psychology_health_assist.common;
 
 import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
+import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.catalina.connector.ClientAbortException;
 import org.springframework.validation.FieldError;
@@ -8,7 +9,10 @@ import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
 import org.springframework.web.bind.annotation.RestControllerAdvice;
 import org.springframework.web.context.request.async.AsyncRequestNotUsableException;
+import reactor.core.Exceptions;
 
+import java.io.IOException;
+import java.net.SocketException;
 import java.util.stream.Collectors;
 
 @RestControllerAdvice
@@ -32,10 +36,33 @@ public class GlobalExceptionHandler {
             return Result.error(e.getCode(),e.getMessage(), null);
         }
     }
-    //用户主动断开连接
-    @ExceptionHandler(value = {ClientAbortException.class,AsyncRequestNotUsableException.class})
-    public void handleClientAbortException(Exception e){
-        log.error("用户网络断开:{}",e.getMessage());
+    //IO异常处理
+    @ExceptionHandler(IOException.class)
+    public void handleIOException(HttpServletResponse response, IOException e){
+        // 靠字符串，错误类型判断是否是网络断开异常不通用
+//        //找底层Cause
+//        Throwable rootCause = Exceptions.unwrap(e);
+//        String msg=rootCause.getMessage()!=null?rootCause.getMessage().toLowerCase():"";
+//        //根据msg判断是否是网络断开异常
+//        boolean isNetWorkDisconnect =
+//                rootCause instanceof ClientAbortException ||
+//                rootCause instanceof SocketException||
+//                msg.contains("broken pipe")        ||
+//                msg.contains("connection reset")||
+//                msg.contains("connection abort")||
+//                msg.contains("forcibly closed");
+//        if(isNetWorkDisconnect){
+//            log.info("[SSE] 客户端主动断开连接，停止推送。{}",msg);
+//            return;}
+
+        if(response.isCommitted()){
+            log.info("[SSE] 客户端主动断开连接，停止推送。{}",e.getMessage());
+            return;
+        }
+
+            log.error("出现未知IO异常",e);
+            response.setStatus(HttpServletResponse.SC_INTERNAL_SERVER_ERROR);
+
     }
     //兜底异常
     @ExceptionHandler(Exception.class)

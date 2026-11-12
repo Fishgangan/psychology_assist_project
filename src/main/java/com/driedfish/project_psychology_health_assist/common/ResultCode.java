@@ -6,6 +6,7 @@ public enum ResultCode {
     UNAUTHORIZED("401", "暂未登录或token已经过期"),
     SYSTEM_ERROR("500", "系统错误"),
 
+
     // 参数相关错误
     PARAM_ERROR("400", "参数错误"),
     PARAM_MISSING("4001", "缺少必要参数"),
