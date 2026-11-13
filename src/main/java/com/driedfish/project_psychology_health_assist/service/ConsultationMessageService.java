@@ -61,8 +61,6 @@ public class ConsultationMessageService {
 
 
     }
-
-
     //删除会话所有消息
     public void deleteMessagesBySessionId(Long sessionId) {
         LambdaQueryWrapper<ConsultationMessage> queryWrapper = new LambdaQueryWrapper<>();

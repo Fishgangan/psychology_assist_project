@@ -2,7 +2,10 @@ package com.driedfish.project_psychology_health_assist.controller;
 
 import com.auth0.jwt.interfaces.DecodedJWT;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.LoginCommandDTO;
+import com.driedfish.project_psychology_health_assist.common.DTO.command.PasswordUpdateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.RegisterCommandDTO;
+import com.driedfish.project_psychology_health_assist.common.DTO.command.UserUpdateCommandDTO;
+import com.driedfish.project_psychology_health_assist.common.DTO.response.UserDetailDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.UserLoginResponseDTO;
 import com.driedfish.project_psychology_health_assist.common.Result;
 import com.driedfish.project_psychology_health_assist.common.ResultCode;
@@ -27,20 +30,42 @@ public class UserController {
     }
     //用户注册
     @PostMapping("/add")
-    public Result<UserLoginResponseDTO.UserDetailResponseDTO> register(@Valid @RequestBody RegisterCommandDTO dto) {
-        UserLoginResponseDTO.UserDetailResponseDTO userDetailResponseDTO = userService.register(dto);
+    public Result<UserDetailDTO> register(@Valid @RequestBody RegisterCommandDTO dto) {
+        UserDetailDTO userDetailResponseDTO = userService.register(dto);
         return Result.success(userDetailResponseDTO);
     }
     //获取当前用户信息
     @GetMapping("/current")
-    public Result<UserLoginResponseDTO.UserDetailResponseDTO> getCurrentUser() {
+    public Result<UserDetailDTO> getCurrentUser() {
         //获取当前用户
         Long userId = SecurityUtils.getUserId();
         if(userId==null){
             return Result.error(ResultCode.UNAUTHORIZED);
         }
-        UserLoginResponseDTO.UserDetailResponseDTO userDetailResponseDTO = userService.getUserById(userId);
+        UserDetailDTO userDetailResponseDTO = userService.getUserById(userId);
         return Result.success(userDetailResponseDTO);
+    }
+    //更新用户信息
+    @PostMapping("/update")
+    public Result<UserDetailDTO> updateUser(@Valid @RequestBody UserUpdateCommandDTO dto) {
+        //获取当前用户
+        Long userId = SecurityUtils.getUserId();
+        if(userId==null){
+            return Result.error(ResultCode.UNAUTHORIZED);
+        }
+        UserDetailDTO userDetailResponseDTO = userService.updateUser(userId,dto);
+        return Result.success(userDetailResponseDTO);
+    }
+    //更新用户密码
+    @PostMapping("/updatePassword")
+    public Result<String> updatePassword(@Valid @RequestBody PasswordUpdateDTO dto) {
+        //获取当前用户
+        Long userId = SecurityUtils.getUserId();
+        if(userId==null){
+            return Result.error(ResultCode.UNAUTHORIZED);
+        }
+        userService.updatePassword(userId,dto);
+        return Result.success("密码更新成功");
     }
     //用户登出
     @PostMapping("/logout")

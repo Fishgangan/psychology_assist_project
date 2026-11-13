@@ -60,12 +60,6 @@ public class ConsultationSessionService {
     }
     //删除会话
     public void deleteSession(Long sessionId) {
-//        ConsultationSession session = consultationSessionMapper.selectById(sessionId);
-//        if (session == null) {
-//            throw new BusinessException(ResultCode.SESSION_NOT_EXIST);
-//        }
-//        if(!session.getUserId().equals(userId)){
-//            throw new BusinessException(ResultCode.SESSION_NOT_PERMISSION);}
         consultationSessionMapper.deleteById(sessionId);
     }
     //查询所有会话

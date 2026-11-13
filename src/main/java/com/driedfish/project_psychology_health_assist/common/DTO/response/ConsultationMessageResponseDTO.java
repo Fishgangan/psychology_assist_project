@@ -18,14 +18,8 @@ public class ConsultationMessageResponseDTO {
     // 发送者类型 1:用户 2:AI助手
     private Integer senderType;
 
-    // 发送者类型描述
-    private String senderTypeDesc;
-
     // 消息类型 1:文本
     private Integer messageType;
-
-    // 消息类型描述
-    private String messageTypeDesc;
 
     // 消息内容
     private String content;

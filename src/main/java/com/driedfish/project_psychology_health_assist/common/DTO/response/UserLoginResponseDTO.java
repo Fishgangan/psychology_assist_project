@@ -11,28 +11,6 @@ import java.time.LocalDateTime;
 public class UserLoginResponseDTO {
     private String token;
     private String roleType;
-    private UserDetailResponseDTO userInfo;
-    @Builder
-    @Data
-    public static class UserDetailResponseDTO {
-        private Long id;
-        private String username;
-        private String email;
-        private String nickname;
-        private String avatar;
-        private String phone;
-        private Integer gender;
-        private String genderDisplayName;
-        private LocalDate birthday;
-        private Integer userType;
-        private String userTypeDisplayName;
-        private Integer status;
-        private String statusDisplayName;
-        private String displayName;
-        private LocalDateTime createdAT;
-        private LocalDateTime updatedAT;
+    private UserDetailDTO userInfo;
 
-
-
-    }
 }

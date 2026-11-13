@@ -1,5 +1,6 @@
 package com.driedfish.project_psychology_health_assist.common.DTO.command;
 
+import com.fasterxml.jackson.annotation.JsonFormat;
 import jakarta.validation.constraints.Email;
 import jakarta.validation.constraints.NotBlank;
 import jakarta.validation.constraints.Pattern;
@@ -20,6 +21,8 @@ public class RegisterCommandDTO {
     private String email;
     @Size(max = 50, message = "昵称长度不能超过50个字符")
     private String nickname;
+    @Size(max = 255, message = "头像路径长度不能超过255个字符")
+    private String avatar;
     @Pattern(regexp = "^1[3-9]\\d{9}$", message = "手机号格式错误")
     private String phone;
     @NotBlank(message = "密码不能为空")
@@ -27,9 +30,10 @@ public class RegisterCommandDTO {
     private String password;
     @NotBlank(message = "确认密码不能为空")
     private String confirmPassword;
+    @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
+    @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "日期格式错误,请使用yyyy-MM-dd格式")
     private LocalDate birthday;
     private Integer gender;
-    private Integer userType=1;
 
 
 }

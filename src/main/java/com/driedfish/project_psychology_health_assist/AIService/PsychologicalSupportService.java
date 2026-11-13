@@ -1,12 +1,8 @@
 package com.driedfish.project_psychology_health_assist.AIService;
-
-import com.baomidou.mybatisplus.core.conditions.query.QueryWrapper;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
-import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
-import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
 import com.driedfish.project_psychology_health_assist.util.SessionUtils;
@@ -20,6 +16,7 @@ import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 import org.springframework.util.StringUtils;
@@ -39,11 +36,13 @@ public class PsychologicalSupportService {
     private ChatClient chatClient;
     @Autowired
     private ChatMemory chatMemory;
+    @Value("${spring.ai.open-ai.chat.options.model:qwen-turbo}")
+    private String currentAiModel;
     @Autowired
     private ConsultationSessionService consultationSessionService;
     @Autowired
     private ConsultationMessageService consultationMessageService;
-
+    //开始会话
     public StructOutPut.StreamChatSession startSession(Long userId, ConsultationSessionCreateDTO createDTO) {
         // 会话创建逻辑
         ConsultationSession consultationSession = consultationSessionService.createSession(userId, createDTO);
@@ -64,6 +63,7 @@ public class PsychologicalSupportService {
 
 
     }
+    //流式对话
     public Flux<String> streamPsychologicalChat(String sessionId,String userMessage) {
         Long dbSessionId = SessionUtils.extractSessionId(sessionId);
         String conversationId="conversation_"+sessionId;
@@ -108,7 +108,7 @@ public class PsychologicalSupportService {
                                     if(StringUtils.hasText(completeRes)){
                                         //用Mono.fromCallable创建响应流 把SQL操作放到Callable中，防止阻塞主线程，导致响应延迟
                                         Mono.fromRunnable(()->{
-                                            consultationMessageService.saveAiMessage(dbSessionId, completeRes, "open-ai");
+                                            consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);
                                             //添加ai助手消息到对话记忆管理
                                             List<Message> aiMessages=new ArrayList<>();
                                             aiMessages.add(new AssistantMessage(completeRes));
@@ -139,7 +139,6 @@ public class PsychologicalSupportService {
 
 
     }
-
     //删除会话
     @Transactional(rollbackFor = Exception.class)
     public void deleteSession(String sessionId) {

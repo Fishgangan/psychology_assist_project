@@ -4,6 +4,7 @@ import com.auth0.jwt.JWTVerifier;
 import com.auth0.jwt.algorithms.Algorithm;
 import com.auth0.jwt.exceptions.JWTVerificationException;
 import com.auth0.jwt.interfaces.DecodedJWT;
+import com.driedfish.project_psychology_health_assist.common.DTO.internal.TokenVerifyResult;
 import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 import com.driedfish.project_psychology_health_assist.config.JwtConfig;
@@ -65,10 +66,10 @@ public class JwtTokenUtil {
         return null;
     }
     //验证token
-    public TokenVerifyResult validateToken(String token){
+    public TokenVerifyResult.result validateToken(String token){
         try{DecodedJWT decodedJWT=verifyToken(token);
             if(decodedJWT==null){
-                return new TokenVerifyResult(null,null,null,false);
+                return new TokenVerifyResult.result(null,null,null,false);
             }
             String username=decodedJWT.getClaim("username").asString();
             Long userId=decodedJWT.getClaim("userId").asLong();
@@ -82,11 +83,11 @@ public class JwtTokenUtil {
                 }
             }
             if(roleType!=null&&StringUtils.hasText(username)&&userId!=null){
-                return new TokenVerifyResult(username,userId,roleType,true);
+                return new TokenVerifyResult.result(username,userId,roleType,true);
             }
-            return new TokenVerifyResult(null,null,null,false);}
+            return new TokenVerifyResult.result(null,null,null,false);}
         catch (Exception e){
-            return new TokenVerifyResult(null,null,null,false);
+            return new TokenVerifyResult.result(null,null,null,false);
         }
 
 
@@ -148,19 +149,5 @@ public class JwtTokenUtil {
                 stringRedisTemplate.hasKey(TOKEN_BLACKLIST_PREFIX + token));
     }
 
-    //token返回结果封装
-    @Getter
-    public static class TokenVerifyResult {
 
-        private final String username;
-        private final Long userId;
-        private final Integer roleType;
-        private final boolean valid;
-        public TokenVerifyResult(String username,Long userId,Integer roleType,boolean valid){
-            this.username=username;
-            this.userId=userId;
-            this.roleType=roleType;
-            this.valid=valid;
-        }
-    }
 }

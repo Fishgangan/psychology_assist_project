@@ -16,4 +16,5 @@ public class SecurityUtils {
         //从认证对象中获取用户id
         return  (Long) authentication.getPrincipal();
     }
+
 }

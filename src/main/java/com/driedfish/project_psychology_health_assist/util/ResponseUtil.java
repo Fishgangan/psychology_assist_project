@@ -20,19 +20,14 @@ public class ResponseUtil {
         if(response.isCommitted()){
             return;
         }
-        int httpCode = switch (resultCode) {
-            case UNAUTHORIZED,ACCESS_UNAUTHORIZED,TOKEN_INVALID,TOKEN_EXPIRED,TOKEN_BLOCKED-> HttpStatus.HTTP_UNAUTHORIZED;
-            case TOKEN_ACCESS_FORBIDDEN -> HttpStatus.HTTP_FORBIDDEN;
-            default -> HttpStatus.HTTP_BAD_REQUEST;
-        };
-        response.setStatus(httpCode);
+        response.setStatus(HttpStatus.HTTP_OK);
         response.setContentType(MediaType.APPLICATION_JSON_VALUE);
         response.setCharacterEncoding(StandardCharsets.UTF_8.name());
-        //改掉try-with-resources，因为response.getWriter()会自动关闭writer，导致writer无法使用，需要手动关闭
+        //改掉try-with-resources，因为出{}时这种语法会自动关闭writer，但writer是由tomcat管理的，导致writer无法继续使用，自己flush()一下即可
         try{PrintWriter writer =response.getWriter();
             String jsonResponse = JSONUtil.toJsonStr(Result.error(resultCode));
             writer.print(jsonResponse);
-            writer.flush();//确保响应内容写入输出流
+            writer.flush();
         }
         catch (IOException e){
             log.warn("响应异常"+e.getMessage());
