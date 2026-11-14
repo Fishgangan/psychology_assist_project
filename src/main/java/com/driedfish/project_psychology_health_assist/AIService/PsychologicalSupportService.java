@@ -1,8 +1,10 @@
 package com.driedfish.project_psychology_health_assist.AIService;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
+import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
+import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
 import com.driedfish.project_psychology_health_assist.util.SessionUtils;
@@ -64,11 +66,14 @@ public class PsychologicalSupportService {
 
     }
     //流式对话
-    public Flux<String> streamPsychologicalChat(String sessionId,String userMessage) {
+    public Flux<String> streamPsychologicalChat(String sessionId,String userMessage,Long userId) {
+
         Long dbSessionId = SessionUtils.extractSessionId(sessionId);
         String conversationId="conversation_"+sessionId;
         //用Mono.fromCallable创建响应流 把SQL操作放到Callable中，防止阻塞主线程，导致响应延迟
         return Mono.fromCallable(()->{
+            //检查会话是否属于当前用户
+            consultationSessionService.checkSessionOwner(dbSessionId,userId);
             //是否是初始消息
             boolean isInitialMessage=false;
             //检查会话是否存在，避免重复保存
@@ -141,8 +146,10 @@ public class PsychologicalSupportService {
     }
     //删除会话
     @Transactional(rollbackFor = Exception.class)
-    public void deleteSession(String sessionId) {
+    public void deleteSession(String sessionId,Long userId) {
         Long dbSessionId = SessionUtils.extractSessionId(sessionId);
+        //检查会话是否属于当前用户
+        consultationSessionService.checkSessionOwner(dbSessionId,userId);
         consultationMessageService.deleteMessagesBySessionId(dbSessionId);
         consultationSessionService.deleteSession(dbSessionId);
     }

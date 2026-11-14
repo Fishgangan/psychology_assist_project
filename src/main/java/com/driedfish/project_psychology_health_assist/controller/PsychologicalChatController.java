@@ -48,12 +48,18 @@ public class PsychologicalChatController {
     @CheckSessionOwner
     @PostMapping(value="/stream",produces = MediaType.TEXT_EVENT_STREAM_VALUE)
     public Flux<ServerSentEvent<String>> streamChat(@Valid @RequestBody ConsultationStreamDTO streamDTO){
-        return psychologicalSupportService.streamPsychologicalChat(streamDTO.getSessionId(),streamDTO.getUserMessage())
+        //获取当前用户
+        Long userId = SecurityUtils.getUserId();
+        return psychologicalSupportService.streamPsychologicalChat(streamDTO.getSessionId(),streamDTO.getUserMessage(),userId)
                 .map(fragment->{
                     return ServerSentEvent.<String>builder()
                             .event("message")
                             .data(JSONUtil.toJsonStr(Result.success(Map.of("content",fragment,"type","normal")))).build();
                 })
+                .concatWith(Flux.just(ServerSentEvent.<String>builder()
+                        .event("done")
+                        .data("{}")
+                        .build()))
                 //ai中途处理异常
                 .onErrorResume(error->{
                     //打印异常信息
@@ -62,10 +68,7 @@ public class PsychologicalChatController {
                         .event("error")
                         .data(JSONUtil.toJsonStr(Result.error(ResultCode.SYSTEM_ERROR)))
                         .build());})
-                .concatWith(Flux.just(ServerSentEvent.<String>builder()
-                        .event("done")
-                        .data("{}")
-                        .build()))
+
                 .delayElements(Duration.ofMillis(50));//添加延迟时间，避免流过快
 
 }   
@@ -73,7 +76,10 @@ public class PsychologicalChatController {
     @CheckSessionOwner
     @DeleteMapping("/sessions/{sessionId}")
     public Result<String> deleteSession(@PathVariable String sessionId){
-        psychologicalSupportService.deleteSession(sessionId);
+        //获取当前用户
+        Long userId = SecurityUtils.getUserId();
+        //删除会话
+        psychologicalSupportService.deleteSession(sessionId,userId);
         return Result.success("对话删除成功");
     }
 
@@ -93,6 +99,9 @@ public class PsychologicalChatController {
     @CheckSessionOwner
     @GetMapping("/session/{sessionId}/messages")
     public Result<StructOutPut.StreamChatMessageList> getMessages(@PathVariable String sessionId,@RequestParam int pageNum, @RequestParam int pageSize){
-        return Result.success(consultationSessionService.getMessages(sessionId,pageNum,pageSize));
+        //获取当前用户
+        Long userId = SecurityUtils.getUserId();
+        //获取会话消息列表
+        return Result.success(consultationSessionService.getMessages(sessionId,pageNum,pageSize,userId));
     }
 }

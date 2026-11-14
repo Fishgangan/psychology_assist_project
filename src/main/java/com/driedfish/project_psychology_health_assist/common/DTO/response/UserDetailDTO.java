@@ -15,13 +15,9 @@ public class UserDetailDTO {
     private String avatar;
     private String phone;
     private Integer gender;
-    private String genderDisplayName;
     private LocalDate birthday;
     private Integer userType;
-    private String userTypeDisplayName;
     private Integer status;
-    private String statusDisplayName;
-    private String displayName;
     private LocalDateTime createdAt;
     private LocalDateTime updatedAt;
 

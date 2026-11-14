@@ -62,6 +62,10 @@ public class ConsultationSessionService {
     public void deleteSession(Long sessionId) {
         consultationSessionMapper.deleteById(sessionId);
     }
+    //根据会话ID查询会话
+    public ConsultationSession getSessionById(Long sessionId) {
+        return consultationSessionMapper.selectById(sessionId);
+    }
     //查询所有会话
     public StructOutPut.StreamChatSessionList getSessionList(int pageNum, int pageSize, Long userId) {
 
@@ -122,16 +126,7 @@ public class ConsultationSessionService {
 
     }
     //查询会话所有消息
-    public StructOutPut.StreamChatMessageList getMessages(String sessionId,int pageNum, int pageSize) {
-//
-//        //验证会话是否存在
-//        ConsultationSession session = consultationSessionMapper.selectById(sessionIdLong);
-//        if(session==null){
-//            throw new BusinessException(ResultCode.SESSION_NOT_EXIST);
-//        }
-//        if(!session.getUserId().equals(userId)){
-//            throw new BusinessException(ResultCode.SESSION_NOT_PERMISSION);
-//        }
+    public StructOutPut.StreamChatMessageList getMessages(String sessionId,int pageNum, int pageSize, Long userId) {
         //分页查询
         if(pageSize>100){
             pageSize=100;
@@ -142,6 +137,8 @@ public class ConsultationSessionService {
         Page<ConsultationMessage> page = new Page<>(pageNum, pageSize);
         //根据会话ID查询消息
         Long sessionIdLong = SessionUtils.extractSessionId(sessionId);
+        //检查会话是否属于当前用户
+        checkSessionOwner(sessionIdLong,userId);
         LambdaQueryWrapper<ConsultationMessage> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(ConsultationMessage::getSessionId, sessionIdLong);
         //根据时间排序(旧的在前)
@@ -151,4 +148,13 @@ public class ConsultationSessionService {
                 resultPage.getRecords(),
                 resultPage.getTotal());
     }
-    }
+    //检查会话是否属于当前用户
+    public void checkSessionOwner(Long sessionId, Long userId) {
+        ConsultationSession session = consultationSessionMapper.selectById(sessionId);
+        if(session==null){
+            throw new BusinessException(ResultCode.SESSION_NOT_EXIST);
+        }
+        if(!session.getUserId().equals(userId)){
+            throw new BusinessException(ResultCode.SESSION_NOT_PERMISSION);
+        }
+    }}

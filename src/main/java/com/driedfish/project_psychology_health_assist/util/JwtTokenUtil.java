@@ -59,8 +59,12 @@ public class JwtTokenUtil {
         if(request==null){
             return null;
         }
-        String tokenHeader = request.getHeader("token");
+        String tokenHeader = request.getHeader(jwtConfig.getHeader());
+        String prefix=jwtConfig.getTokenPrefix();
         if(StringUtils.hasText(tokenHeader)){
+            if(StringUtils.hasText(prefix)&&tokenHeader.startsWith(prefix)){
+                return tokenHeader.substring(prefix.length());
+            }
             return tokenHeader;
         }
         return null;
