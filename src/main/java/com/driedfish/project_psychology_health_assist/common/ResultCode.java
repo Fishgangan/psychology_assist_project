@@ -35,19 +35,19 @@ public enum ResultCode {
     USER_NOT_ADMIN("6009", "您不是管理员"),
 
     // 会话相关错误
-    SESSION_ID_FORMAT_ERROR("6009", "会话ID格式错误"),
-    SESSION_NOT_EXIST("6010", "会话不存在"),
-    SESSION_NOT_PERMISSION("6011", "这不是您的会话"),
+    SESSION_ID_FORMAT_ERROR("7009", "会话ID格式错误"),
+    SESSION_NOT_EXIST("7010", "会话不存在"),
+    SESSION_NOT_PERMISSION("7011", "这不是您的会话"),
 
 
 
 
     // token相关错误
     TOKEN_INVALID("A0230", "token无效"),
-    TOKEN_EXPIRED("A0230", "token已过期"),
-    TOKEN_BLOCKED("A0230", "token已加入黑名单"),
-    TOKEN_ACCESS_FORBIDDEN("A0231", "token已被禁止访问"),
-    TOKEN_NOT_BLANKED("A0232", "token不能为空"),
+    TOKEN_EXPIRED("A0231", "token已过期"),
+    TOKEN_BLOCKED("A0232", "token已加入黑名单"),
+    TOKEN_ACCESS_FORBIDDEN("A0233", "token已被禁止访问"),
+    TOKEN_NOT_BLANKED("A0234", "token不能为空"),
     AUTHORIZED_ERROR("A0300", "访问权限异常"),
     ACCESS_UNAUTHORIZED("A0301", "访问未授权");
 

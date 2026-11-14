@@ -39,9 +39,6 @@ public class UserController {
     public Result<UserDetailDTO> getCurrentUser() {
         //获取当前用户
         Long userId = SecurityUtils.getUserId();
-        if(userId==null){
-            return Result.error(ResultCode.UNAUTHORIZED);
-        }
         UserDetailDTO userDetailResponseDTO = userService.getUserById(userId);
         return Result.success(userDetailResponseDTO);
     }
@@ -50,9 +47,6 @@ public class UserController {
     public Result<UserDetailDTO> updateUser(@Valid @RequestBody UserUpdateCommandDTO dto) {
         //获取当前用户
         Long userId = SecurityUtils.getUserId();
-        if(userId==null){
-            return Result.error(ResultCode.UNAUTHORIZED);
-        }
         UserDetailDTO userDetailResponseDTO = userService.updateUser(userId,dto);
         return Result.success(userDetailResponseDTO);
     }
@@ -61,9 +55,6 @@ public class UserController {
     public Result<String> updatePassword(@Valid @RequestBody PasswordUpdateDTO dto) {
         //获取当前用户
         Long userId = SecurityUtils.getUserId();
-        if(userId==null){
-            return Result.error(ResultCode.UNAUTHORIZED);
-        }
         userService.updatePassword(userId,dto);
         return Result.success("密码更新成功");
     }

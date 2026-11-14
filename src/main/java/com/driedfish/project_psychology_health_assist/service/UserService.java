@@ -42,7 +42,7 @@ public class UserService {
         if (user == null) {
             throw new BusinessException(ResultCode.USER_NOT_EXIST);
         }
-        String inputPassword = dto.getPassword().trim();
+        String inputPassword = dto.getPassword();
         if (!passwordEncoder.matches(inputPassword, user.getPassword())) {
             throw new BusinessException(ResultCode.PASSWORD_ERROR);}
         if(!UserStatus.NORMAL.getCode().equals(user.getStatus())){

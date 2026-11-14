@@ -73,11 +73,6 @@ public class PsychologicalChatController {
     @CheckSessionOwner
     @DeleteMapping("/sessions/{sessionId}")
     public Result<String> deleteSession(@PathVariable String sessionId){
-        //获取当前用户
-        Long userId = SecurityUtils.getUserId();
-        if(userId==null){
-            return Result.error(ResultCode.UNAUTHORIZED);
-        }
         psychologicalSupportService.deleteSession(sessionId);
         return Result.success("对话删除成功");
     }
@@ -88,9 +83,6 @@ public class PsychologicalChatController {
     public Result<StructOutPut.StreamChatSessionList> getSessionList(@RequestParam int pageNum, @RequestParam int pageSize){
         //获取当前用户
         Long userId = SecurityUtils.getUserId();
-        if(userId==null){
-            return Result.error(ResultCode.UNAUTHORIZED);
-        }
         //获取会话列表
         StructOutPut.StreamChatSessionList sessionList = consultationSessionService.getSessionList(pageNum,pageSize,userId);
         //转换为分页结果
@@ -101,11 +93,6 @@ public class PsychologicalChatController {
     @CheckSessionOwner
     @GetMapping("/session/{sessionId}/messages")
     public Result<StructOutPut.StreamChatMessageList> getMessages(@PathVariable String sessionId,@RequestParam int pageNum, @RequestParam int pageSize){
-        //获取当前用户
-        Long userId = SecurityUtils.getUserId();
-        if(userId==null){
-            return Result.error(ResultCode.UNAUTHORIZED);
-        }
         return Result.success(consultationSessionService.getMessages(sessionId,pageNum,pageSize));
     }
 }

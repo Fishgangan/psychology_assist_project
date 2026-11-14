@@ -63,7 +63,7 @@ public class ConsultationSessionService {
         consultationSessionMapper.deleteById(sessionId);
     }
     //查询所有会话
-public StructOutPut.StreamChatSessionList getSessionList(int pageNum, int pageSize, Long userId) {
+    public StructOutPut.StreamChatSessionList getSessionList(int pageNum, int pageSize, Long userId) {
 
 
         //分页查询

@@ -31,7 +31,6 @@ public class RegisterCommandDTO {
     @NotBlank(message = "确认密码不能为空")
     private String confirmPassword;
     @JsonFormat(pattern = "yyyy-MM-dd", timezone = "GMT+8")
-    @Pattern(regexp = "^\\d{4}-\\d{2}-\\d{2}$", message = "日期格式错误,请使用yyyy-MM-dd格式")
     private LocalDate birthday;
     private Integer gender;
 

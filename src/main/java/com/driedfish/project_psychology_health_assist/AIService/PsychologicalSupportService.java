@@ -143,8 +143,8 @@ public class PsychologicalSupportService {
     @Transactional(rollbackFor = Exception.class)
     public void deleteSession(String sessionId) {
         Long dbSessionId = SessionUtils.extractSessionId(sessionId);
-        consultationSessionService.deleteSession(dbSessionId);
         consultationMessageService.deleteMessagesBySessionId(dbSessionId);
+        consultationSessionService.deleteSession(dbSessionId);
     }
 
 

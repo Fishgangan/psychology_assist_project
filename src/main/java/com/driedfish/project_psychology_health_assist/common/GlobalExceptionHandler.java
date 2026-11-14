@@ -1,9 +1,11 @@
 package com.driedfish.project_psychology_health_assist.common;
 
 import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
+import com.fasterxml.jackson.databind.exc.InvalidFormatException;
 import jakarta.servlet.http.HttpServletResponse;
 import lombok.extern.slf4j.Slf4j;
 import org.apache.catalina.connector.ClientAbortException;
+import org.springframework.http.converter.HttpMessageNotReadableException;
 import org.springframework.validation.FieldError;
 import org.springframework.web.bind.MethodArgumentNotValidException;
 import org.springframework.web.bind.annotation.ExceptionHandler;
@@ -24,6 +26,19 @@ public class GlobalExceptionHandler {
         String msg =  e.getBindingResult().getFieldErrors().stream()
                 .map(FieldError::getDefaultMessage)
                 .collect(Collectors.joining(", "));
+        return Result.error(ResultCode.PARAM_ERROR,msg);
+    }
+    //json解析异常
+    @ExceptionHandler(HttpMessageNotReadableException.class)
+    public Result<?> handleMessageNotReadableException(HttpMessageNotReadableException e){
+        String msg = "请求参数格式错误";
+        if(e.getCause() instanceof InvalidFormatException invalidFormatException){
+            if(!invalidFormatException.getPath().isEmpty()){
+                String fieldName = invalidFormatException.getPath().get(0).getFieldName();
+                Object value = invalidFormatException.getValue();
+                msg=String.format("字段 %s ,您输入值 %s 格式错误",fieldName,value);
+            }
+        }
         return Result.error(ResultCode.PARAM_ERROR,msg);
     }
     // 业务异常
