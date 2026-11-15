@@ -5,7 +5,7 @@ spring:
     password: ${MYSQL_PASSWORD}
   data:
     redis:
-      host: 127.0.0.1
+      host: 49.232.209.73
       port: 6379
   ai:
     open-ai:
@@ -17,6 +17,15 @@ spring:
         completions-path: /chat/completions
       api-key: ${DASHSCOPE_API_KEY}
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      embedding:
+        options:
+          model: BAAI/bge-m3
+        api-key: ${SILICONFLOW_API_KEY}
+        base-url: https://api.siliconflow.cn
+    vectorstore:
+      redis:
+        uri: redis://localhost:6379
+        initialize-schema: true
 #服务器配置
 server:
   port: 8080

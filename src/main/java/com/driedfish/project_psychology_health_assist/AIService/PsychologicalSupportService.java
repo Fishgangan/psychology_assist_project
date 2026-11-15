@@ -1,15 +1,14 @@
 package com.driedfish.project_psychology_health_assist.AIService;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
-import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
-import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
 import com.driedfish.project_psychology_health_assist.util.SessionUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -40,6 +39,8 @@ public class PsychologicalSupportService {
     private ChatMemory chatMemory;
     @Value("${spring.ai.open-ai.chat.options.model:qwen-turbo}")
     private String currentAiModel;
+    @Autowired
+    private QuestionAnswerAdvisor questionAnswerAdvisor;
     @Autowired
     private ConsultationSessionService consultationSessionService;
     @Autowired
@@ -103,7 +104,7 @@ public class PsychologicalSupportService {
                     //调用AI助手
                     return chatClient.prompt(prompt)
                                 .user(userMessage)
-                                .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID,conversationId))
+                                .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID,conversationId).advisors(questionAnswerAdvisor))
                                 .stream()
                                 .content()
                             // 处理流式响应
