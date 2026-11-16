@@ -11,18 +11,12 @@ import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
-
 public class ChatClientConfig {
-    @Bean
-    public ChatMemory chatMemory() {
-        return MessageWindowChatMemory.builder()
-                .maxMessages(30)
-                .build();
-    }
+
     @Bean("open-ai")
-    public ChatClient chatClient(OpenAiChatModel openAiChatModel) {
+    public ChatClient chatClient(OpenAiChatModel openAiChatModel, ChatMemory chatMemory) {
         return ChatClient.builder(openAiChatModel)
-                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory()).build())
+                .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
                 .defaultSystem("你是一个专业的心理疏导师，温柔耐心，能够帮助用户解决心理问题,并提供专业的建议。")
                 .build();
     }

@@ -90,10 +90,6 @@ public class PsychologicalSupportService {
                  consultationMessageService.saveUserMessage(dbSessionId, userMessage, null);
 
             }
-            //把用户消息添加到对话记忆管理
-            List<Message> userMessages=new ArrayList<>();
-            userMessages.add(new UserMessage(userMessage));
-            chatMemory.add(conversationId,userMessages);
             return true;})//返回占位符，等待流处理
             .subscribeOn(Schedulers.boundedElastic())
                 //用flatMapMany创建响应流
@@ -112,13 +108,9 @@ public class PsychologicalSupportService {
                                 .doOnComplete(()->{
                                     String completeRes=aiResponse.toString();
                                     if(StringUtils.hasText(completeRes)){
-                                        //用Mono.fromCallable创建响应流 把SQL操作放到Callable中，防止阻塞主线程，导致响应延迟
+                                        //用Mono.fromRunnable创建响应流 把SQL操作放到Runnable中，防止阻塞主线程，导致响应延迟
                                         Mono.fromRunnable(()->{
                                             consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);
-                                            //添加ai助手消息到对话记忆管理
-                                            List<Message> aiMessages=new ArrayList<>();
-                                            aiMessages.add(new AssistantMessage(completeRes));
-                                            chatMemory.add(conversationId,aiMessages);
                                         }).subscribeOn(Schedulers.boundedElastic())
                                                 .doOnError(error->{
                                                     log.error("保存AI助手消息到Message表失败",error);
