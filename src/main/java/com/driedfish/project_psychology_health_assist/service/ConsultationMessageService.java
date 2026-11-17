@@ -1,6 +1,7 @@
 package com.driedfish.project_psychology_health_assist.service;
 
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
@@ -15,19 +16,26 @@ import java.time.LocalDateTime;
 public class ConsultationMessageService {
     private final ConsultationMessageMapper consultationMessageMapper;
     //保存用户消息
-    public ConsultationMessage saveUserMessage(Long sessionId, String content,String emotion_tag) {
+    public ConsultationMessage saveUserMessage(Long sessionId, String content) {
         //构建用户消息实体
         ConsultationMessage userMessage = ConsultationMessage.builder()
                 .sessionId(sessionId)
                 .senderType(1)
                 .messageType(1)
                 .content(content)
-                .emotionTag(emotion_tag)
                 .createdAt(LocalDateTime.now())
                 .build();
         consultationMessageMapper.insert(userMessage);
         return userMessage;
     }
+    //保存情绪标签
+    public void saveEmotionTag(Long messageId, String emotionTag) {
+        //更新情绪标签
+        consultationMessageMapper.update(new LambdaUpdateWrapper<ConsultationMessage>()
+                .set(ConsultationMessage::getEmotionTag, emotionTag)
+                .eq(ConsultationMessage::getId, messageId));
+    }
+    //保存AI助手消息
     public ConsultationMessage saveAiMessage(Long sessionId,String content,String aiModel) {
         //构建AI助手实体
         ConsultationMessage aiMessage = ConsultationMessage.builder()

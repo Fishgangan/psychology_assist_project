@@ -6,6 +6,7 @@ import com.driedfish.project_psychology_health_assist.common.entity.Consultation
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
 import com.driedfish.project_psychology_health_assist.util.SessionUtils;
+import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
@@ -14,6 +15,7 @@ import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
 import org.springframework.ai.chat.messages.SystemMessage;
 import org.springframework.ai.chat.messages.UserMessage;
+import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.ai.chat.prompt.Prompt;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Qualifier;
@@ -32,30 +34,41 @@ import java.util.List;
 @Slf4j
 @Service
 public class PsychologicalSupportService {
-    @Qualifier("open-ai")
-    @Autowired
-    private ChatClient chatClient;
-    @Autowired
-    private ChatMemory chatMemory;
-    @Value("${spring.ai.open-ai.chat.options.model:qwen-turbo}")
+    @Value("${spring.ai.open-ai.chat.options.model:qwen3.8-27b}")
     private String currentAiModel;
-    @Autowired
-    private QuestionAnswerAdvisor questionAnswerAdvisor;
-    @Autowired
-    private ConsultationSessionService consultationSessionService;
-    @Autowired
-    private ConsultationMessageService consultationMessageService;
+    private final ChatClient chatClient;
+    private final ChatClient emotionChatClient;
+    private final QuestionAnswerAdvisor questionAnswerAdvisor;
+    private final ConsultationSessionService consultationSessionService;
+    private final ConsultationMessageService consultationMessageService;
+    public PsychologicalSupportService(
+            @Qualifier("chat") ChatClient chatClient,
+            @Qualifier("emotion") ChatClient emotionChatClient,
+            QuestionAnswerAdvisor questionAnswerAdvisor,
+            ConsultationSessionService consultationSessionService,
+            ConsultationMessageService consultationMessageService
+               ){
+
+        this.chatClient=chatClient;
+        this.emotionChatClient=emotionChatClient;
+        this.questionAnswerAdvisor=questionAnswerAdvisor;
+        this.consultationSessionService=consultationSessionService;
+        this.consultationMessageService=consultationMessageService;
+
+    }
+
     //开始会话
     public StructOutPut.StreamChatSession startSession(Long userId, ConsultationSessionCreateDTO createDTO) {
         // 会话创建逻辑
         ConsultationSession consultationSession = consultationSessionService.createSession(userId, createDTO);
         //将初始用户消息保存到Message表
-        ConsultationMessage userMessage = consultationMessageService.saveUserMessage(consultationSession.getId(), createDTO.getInitialMessage(), null);
+        consultationMessageService.saveUserMessage(consultationSession.getId(), createDTO.getInitialMessage());
         //创建会话信息
         String sessionId="session_"+consultationSession.getId();
         return new StructOutPut.StreamChatSession(
                 sessionId,
                 userId,
+                createDTO.getSessionTitle(),
                 createDTO.getInitialMessage(),
                 System.currentTimeMillis(),
                 System.currentTimeMillis()+86400000L,//会话过期时间24h
@@ -87,18 +100,15 @@ public class PsychologicalSupportService {
             }
             if(!isInitialMessage){
                 //保存用户消息到Message表
-                 consultationMessageService.saveUserMessage(dbSessionId, userMessage, null);
-
+                 consultationMessageService.saveUserMessage(dbSessionId, userMessage);
             }
             return true;})//返回占位符，等待流处理
             .subscribeOn(Schedulers.boundedElastic())
                 //用flatMapMany创建响应流
                 .flatMapMany(isReady ->{
                     StringBuilder aiResponse=new StringBuilder();
-                    Prompt prompt =new Prompt(List.of(
-                            new SystemMessage(PromptManage.PSYCHOLOGICAL_SUPPORT_SYSTEM_PROMPT)));
                     //调用AI助手
-                    return chatClient.prompt(prompt)
+                    return chatClient.prompt()
                                 .user(userMessage)
                                 .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID,conversationId).advisors(questionAnswerAdvisor))
                                 .stream()
@@ -110,7 +120,22 @@ public class PsychologicalSupportService {
                                     if(StringUtils.hasText(completeRes)){
                                         //用Mono.fromRunnable创建响应流 把SQL操作放到Runnable中，防止阻塞主线程，导致响应延迟
                                         Mono.fromRunnable(()->{
-                                            consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);
+                                            ConsultationMessage message = consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);
+                                            Long messageId = message.getId();
+                                            //分析用户情绪
+                                            try{
+                                                String emotionTag = emotionChatClient.prompt()
+                                                        .user(PromptManage.EMOTION_ANALYSIS_PROMPT+userMessage)
+                                                        .call()
+                                                        .content();
+                                                if(StringUtils.hasText(emotionTag)){
+                                                    consultationMessageService.saveEmotionTag(messageId, emotionTag);
+                                                    log.info("用户情绪分析结果：{}",emotionTag);
+//                                                    consultationSessionService.addLastEmotionAnalysis(dbSessionId,emotionTag);
+                                                }
+                                            }catch (Exception e){
+                                                log.warn("用户情绪分析失败",e);
+                                            }
                                         }).subscribeOn(Schedulers.boundedElastic())
                                                 .doOnError(error->{
                                                     log.error("保存AI助手消息到Message表失败",error);

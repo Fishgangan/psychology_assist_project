@@ -3,6 +3,7 @@ package com.driedfish.project_psychology_health_assist.service;
 import cn.hutool.core.date.DateUtil;
 import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
+import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.driedfish.project_psychology_health_assist.AIService.PsychologicalSupportService;
 import com.driedfish.project_psychology_health_assist.AIService.StructOutPut;
@@ -22,6 +23,7 @@ import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
+import java.time.ZoneId;
 import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
@@ -106,17 +108,16 @@ public class ConsultationSessionService {
                         SessionMessageCountDTO::getCnt,
                         //如果会话ID重复，取第一个值(防止脏数据问题)
                         (a,b)->a));
-        List<StructOutPut.StreamChatSession> volist = sessionList.stream()
+        List<StructOutPut.StreamChatSessionItem> volist = sessionList.stream()
                 .map(session -> {
                     //N+1查询优化
                     //Long msgCount=consultationMessageMapper.selectCount(new LambdaQueryWrapper<ConsultationMessage>().eq(ConsultationMessage::getSessionId, session.getId()));
-                    return new StructOutPut.StreamChatSession(
+                    return new StructOutPut.StreamChatSessionItem(
                         "session_"+session.getId().toString(),
                         userId,
                         session.getSessionTitle(),
-                        //转换为东八区时间戳
-                        session.getStartedAt().toInstant(ZoneOffset.ofHours(8)).toEpochMilli(),
-                        session.getStartedAt().plusDays(1).toInstant(ZoneOffset.ofHours(8)).toEpochMilli(),
+                        session.getStartedAt().atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
+                        session.getStartedAt().plusDays(1).atZone(ZoneId.systemDefault()).toInstant().toEpochMilli(),
                         msgCountMap.getOrDefault(session.getId(),0L),
                         "active")
                 ;}).toList();
@@ -157,4 +158,14 @@ public class ConsultationSessionService {
         if(!session.getUserId().equals(userId)){
             throw new BusinessException(ResultCode.SESSION_NOT_PERMISSION);
         }
-    }}
+    }
+//    //添加最后一次情绪分析结果
+//    public void addLastEmotionAnalysis(Long sessionId, String emotionTag) {
+//        //更新会话情绪分析结果
+//        consultationSessionMapper.update(new LambdaUpdateWrapper<ConsultationSession>()
+//                .set(ConsultationSession::getLastEmotionAnalysis,emotionTag)
+//                .set(ConsultationSession::getLastEmotionUpdatedAt,LocalDateTime.now())
+//                .eq(ConsultationSession::getId,sessionId));
+//    }
+
+}

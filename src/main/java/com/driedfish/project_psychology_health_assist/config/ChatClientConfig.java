@@ -1,23 +1,30 @@
 package com.driedfish.project_psychology_health_assist.config;
-
+import com.driedfish.project_psychology_health_assist.AIService.PromptManage;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.MessageChatMemoryAdvisor;
-import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.memory.ChatMemory;
-import org.springframework.ai.chat.memory.MessageWindowChatMemory;
-import org.springframework.ai.openai.OpenAiChatModel;
-import org.springframework.ai.vectorstore.VectorStore;
+import org.springframework.ai.chat.model.ChatModel;
+import org.springframework.ai.chat.prompt.ChatOptions;
+import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
 import org.springframework.context.annotation.Configuration;
 
 @Configuration
 public class ChatClientConfig {
 
-    @Bean("open-ai")
-    public ChatClient chatClient(OpenAiChatModel openAiChatModel, ChatMemory chatMemory) {
-        return ChatClient.builder(openAiChatModel)
+
+    @Bean("chat")
+    public ChatClient chatClient(ChatClient.Builder builder, ChatMemory chatMemory) {
+        return builder
+                .defaultSystem(PromptManage.PSYCHOLOGICAL_SUPPORT_SYSTEM_PROMPT)
                 .defaultAdvisors(MessageChatMemoryAdvisor.builder(chatMemory).build())
-                .defaultSystem("你是一个专业的心理疏导师，温柔耐心，能够帮助用户解决心理问题,并提供专业的建议。")
+                .build();
+    }
+    @Bean("emotion")
+    public ChatClient emotionChatClient(ChatClient.Builder builder,
+                                        @Value("${spring.ai.open-ai.emotion.model:qwen-3.8-27b}") String emotionAiModel) {
+        return builder
+                .defaultOptions(ChatOptions.builder().model(emotionAiModel).build())
                 .build();
     }
 }
