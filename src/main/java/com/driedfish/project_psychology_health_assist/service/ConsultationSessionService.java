@@ -5,7 +5,6 @@ import cn.hutool.core.util.StrUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.baomidou.mybatisplus.core.conditions.update.LambdaUpdateWrapper;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
-import com.driedfish.project_psychology_health_assist.AIService.PsychologicalSupportService;
 import com.driedfish.project_psychology_health_assist.AIService.StructOutPut;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.SessionMessageCountDTO;
@@ -19,12 +18,10 @@ import com.driedfish.project_psychology_health_assist.mapper.ConsultationSession
 import com.driedfish.project_psychology_health_assist.mapper.UserMapper;
 import com.driedfish.project_psychology_health_assist.util.SessionUtils;
 import lombok.RequiredArgsConstructor;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.stereotype.Service;
 
 import java.time.LocalDateTime;
 import java.time.ZoneId;
-import java.time.ZoneOffset;
 import java.util.List;
 import java.util.Map;
 import java.util.Objects;
@@ -159,13 +156,12 @@ public class ConsultationSessionService {
             throw new BusinessException(ResultCode.SESSION_NOT_PERMISSION);
         }
     }
-//    //添加最后一次情绪分析结果
-//    public void addLastEmotionAnalysis(Long sessionId, String emotionTag) {
-//        //更新会话情绪分析结果
-//        consultationSessionMapper.update(new LambdaUpdateWrapper<ConsultationSession>()
-//                .set(ConsultationSession::getLastEmotionAnalysis,emotionTag)
-//                .set(ConsultationSession::getLastEmotionUpdatedAt,LocalDateTime.now())
-//                .eq(ConsultationSession::getId,sessionId));
-//    }
+    //添加会话情绪分析结果
+    public void addLastEmotionAnalysis(Long sessionId, String analysis) {
+        consultationSessionMapper.update(new LambdaUpdateWrapper<ConsultationSession>()
+                .eq(ConsultationSession::getId, sessionId)
+                .set(ConsultationSession::getLastEmotionAnalysis, analysis)
+                .set(ConsultationSession::getLastEmotionUpdatedAt, LocalDateTime.now()));
+    }
 
 }

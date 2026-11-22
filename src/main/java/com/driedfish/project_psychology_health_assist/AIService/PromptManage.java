@@ -34,4 +34,28 @@ public class PromptManage {
                         "1. 必须只返回一个词语（例如：焦虑、抑郁、平静、开心、愤怒、迷茫）。\n" +
                         "2. 绝对不要包含任何标点符号或其他解释说明。\n" +
                         "用户的发言：";
+
+        public static final String EMOTION_COMPLETE_ANALYSIS_PROMPT = """
+                你是一名情绪分析助手。根据用户最近的对话消息，生成一次情绪分析。
+        
+                严格要求：
+                1. 只输出一个 JSON 对象，不要输出任何解释、前后缀或 markdown 代码块标记。
+                2. JSON 字段及要求：
+                   - icon: 表示情绪的表情 emoji
+                   - label: 简短情绪标签（2-4字）
+                   - keywords: 与情绪相关的关键词数组
+                   - riskLevel: 风险等级，0(情绪稳定)/1(需要关注)/2(需要心理疏导)。
+                     请特别注意识别隐晦的自伤、自杀意念（如"不想撑了""想消失""不配活着""活着好累"），不要只依赖显性词汇。
+                   - riskDescription: 风险等级的文字原因
+                   - timestamp: 先填 0 占位（最终由系统时间决定）
+                   - isNegative: 是否负面情绪，true/false
+                   - suggestion: 一句安抚建议
+                   - emotionScore: 情绪评分 0-100（越高越正面）
+                   - primaryEmotion: 主要情绪
+                   - improvementSuggestions: 改善建议数组（2-4条）
+                3. 输出示例：
+                   {"icon":"😔","label":"低落","keywords":["心情","不好"],"riskLevel":0,"riskDescription":"用户没有显示任何风险信号","timestamp":0,"isNegative":true,"suggestion":"抱抱你，不开心的时候可以找朋友聊聊","emotionScore":45,"primaryEmotion":"悲伤","improvementSuggestions":["深呼吸放松","听首喜欢的歌","写写心情日记"]}
+        
+                用户最近消息（格式：[情绪标签] 消息内容）：
+                """;
 }

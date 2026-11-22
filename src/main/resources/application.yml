@@ -11,12 +11,14 @@ spring:
     open-ai:
       chat:
         options:
-          model: qwen3.8-27b
+          model: qwen4-max
         completions-path: /chat/completions
       api-key: ${DASHSCOPE_API_KEY}
       base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
       emotion:
-        model: qwen4-max
+        model: qwen3.8-flash
+      emotionComplete:
+        model: qwen3.8-flash
       embedding:
         options:
           model: BAAI/bge-m3
