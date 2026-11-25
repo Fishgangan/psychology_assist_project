@@ -4,6 +4,11 @@ import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 
 public class SessionUtils {
+    //获取会话记忆的 key
+    public static String conversationId(String sessionId) {
+        return "conversation_" + sessionId;
+    }
+
     //获取sessionId
     public static Long extractSessionId(String sessionId) {
         if(sessionId==null||!sessionId.startsWith("session_")){

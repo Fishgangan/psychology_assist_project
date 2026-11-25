@@ -2,7 +2,6 @@ package com.driedfish.project_psychology_health_assist.util;
 
 import com.driedfish.project_psychology_health_assist.common.DTO.internal.TokenVerifyResult;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.UserDetailDTO;
-import com.driedfish.project_psychology_health_assist.common.DTO.response.UserLoginResponseDTO;
 import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.config.SecurityConfig;
 import com.driedfish.project_psychology_health_assist.enumClass.UserStatus;

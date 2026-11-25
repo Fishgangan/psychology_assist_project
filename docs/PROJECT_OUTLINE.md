@@ -287,19 +287,33 @@ src/main/java/com/driedfish/project_psychology_health_assist/
 
 ```json
 {
-  "icon": "😔",                         // 表情 emoji
-  "label": "低落",                       // 简短标签
-  "keywords": ["心情", "不好"],           // 关键词数组
-  "riskLevel": 0,                       // 0-情绪稳定 1-需要关注 2-需要心理疏导
-  "riskDescription": "需要关注",         // 风险描述（与 riskLevel 同源）
-  "timestamp": 1795352476088,           // 毫秒时间戳（代码填充）
-  "isNegative": true,                   // 是否负面
-  "suggestion": "抱抱你，不开心的时候…",  // 安抚建议
-  "emotionScore": 45,                   // 0~100，越高越正面
-  "primaryEmotion": "悲伤",              // 主要情绪
+  "icon": "😔",
+  "label": "低落",
+  "keywords": ["心情", "不好"],
+  "riskLevel": 0,
+  "riskDescription": "情绪稳定",
+  "timestamp": 1795352476088,
+  "isNegative": true,
+  "suggestion": "抱抱你，不开心的时候可以找朋友聊聊",
+  "emotionScore": 45,
+  "primaryEmotion": "悲伤",
   "improvementSuggestions": ["深呼吸放松", "听首喜欢的歌"]
 }
 ```
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| `icon` | string | 表情 emoji |
+| `label` | string | 简短情绪标签（2–4 字） |
+| `keywords` | string[] | 与情绪相关的关键词 |
+| `riskLevel` | int | 0 情绪稳定 / 1 需要关注 / 2 需要心理疏导 |
+| `riskDescription` | string | 风险描述；由 `RiskLevel` 枚举按最终等级产出，与 `riskLevel` 同源 |
+| `timestamp` | long | 毫秒时间戳，代码填充 |
+| `isNegative` | boolean | 是否负面情绪 |
+| `suggestion` | string | 一句安抚建议 |
+| `emotionScore` | int | 0–100，越高越正面 |
+| `primaryEmotion` | string | 主要情绪 |
+| `improvementSuggestions` | string[] | 改善建议 2–4 条 |
 
 > 该 schema **对齐原作者 `last_emotion_analysis` 格式**，不可随意改名，否则与前端/历史数据割裂。
 
@@ -394,38 +408,66 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 12. 结构化输出 DTO 拆分：`StreamChatSession` / `StreamChatSessionItem`
 13. 多 ChatClient 装配：`chat` / `emotionTag` / `emotionComplete`
 14. `riskLevel` 与 `riskDescription` 同源：统一由 `RiskLevel` 枚举产出（不再使用模型原值）
+15. 记忆分层：`ConversationMemoryStore`（双 key）+ `ChatContextAssembler`（摘要进 system）+ `MemoryCompactor`（增量压缩）+ `ConversationMemoryService`（门面）；摘要双写 MySQL 真源，Redis 缺失时回落
+16. 记忆接线：`chat` 通道移除 advisor 与 defaultSystem，链路改为 `prepare → messages → record → compact`，全部跑在 `boundedElastic` 上
 
 ---
 
 ## 9. 待办路线图（⏳，按顺序）
 
-### 阶段 1：Redis 记忆总结 / 压缩
-- 触发：会话消息数达到阈值（如 50 条）
-- **增量压缩**：旧摘要 + 新消息 → 新摘要（不能只压新消息，否则丢早期信息）
-- **类型标记**：Redis 存 `SUMMARY|...`，与 `USER|` / `AI|` 区分
-- **并存策略**：`SUMMARY|摘要` + 最近 K 条原始消息并存
-- 失败降级：压缩失败不删原始消息
-- 建议：独立 `MemoryCompactionService` + `summaryChatClient`；摘要可双写 Redis + MySQL `memory_summary` 字段
+### 阶段 1：Redis 记忆总结 / 压缩（✅ 已完成）
+- 实现落在 `AIService/memory`：`Store`（双 key 存取）、`Assembler`（快照 → messages）、`Compactor`（增量压缩）、`Facade`（prepare / record / compactIfNeeded / clear）
+- 触发：`memory.compact.threshold`（默认 30 条消息）；压完保留 `memory.compact.keep`（默认 10 条）
+- **增量压缩**：旧摘要 + 最旧一段对话 → 新摘要，早期信息不丢
+- **双写**：MySQL `consultation_session.memory_summary` 为真源，Redis `chat_summary:` 为快路径；Redis 缺失时回落 MySQL 并回填
+- **降级**：压缩失败不删原始消息；写入顺序 MySQL → Redis → 裁消息
+- 待补：压缩防重入锁（见 §11）
 
 ### 阶段 2：用户画像提取
 - **静态画像**：注册信息（性别/生日/职业等）
 - **动态画像**：从 `emotion_tag` + 会话情绪 JSON 累积（情绪分布、高频主题、趋势）
 - 存储：MySQL `user_profile` 表；用途：RAG 个性化过滤 + prompt 注入画像摘要
 
-### 阶段 3：RAG 升级
-- 3a Query 改写（轻量模型）
-- 3b 多路召回（向量 + BM25，Redis Stack `FT.SEARCH`）
-- 3c Rerank 重排（SiliconFlow bge-reranker 或规则）
-- 渐进式：先 Query 改写 → 再多路召回 → 最后 Rerank
+### 阶段 3：RAG 升级（👈 下一步）
+
+现状：`RagConfig` 定义 `VectorStore`（`RedisVectorStore`，`initializeSchema=true`）与 `QuestionAnswerAdvisor`；
+`RagDataInitializer` 灌 `resources/data/psychology_data.txt`；检索结果由 advisor 自动注入 prompt。
+
+**3a 基线摸底（先做，不写新功能）**
+- 准备 10 个典型问题（口语化 / 知识型 / 情绪型各几条），记录当前 topK 实际返回了什么
+- 记录三个数：命中率、首字延迟、注入后的 token 长度
+- 产出一份对比基线，否则后面改动无法判断好坏
+
+**3b Query 改写**
+- 新增 `queryRewrite` 通道（`qwen3.8-flash`），把口语化问题改写成检索式
+- **只改写检索用的 query，不改给模型的原始用户消息**
+- 验收：基线里"答非所问"的问题，至少一半改善
+
+**3c 多路召回（向量 + BM25）**
+- 向量：现有 `similaritySearch`
+- 关键词：Redis Stack `FT.SEARCH`，两路结果用 RRF 融合
+- 验收：专有名词类问题（如"认知行为疗法"）召回明显变好
+
+**3d Rerank**
+- SiliconFlow `bge-reranker` 对融合后的候选重排，取 topN
+- 验收：注入的 top3 人工抽查相关性明显提升
+
+**3e 引用溯源**
+- 检索结果带上 `doc_id` / `title` / `score`，随回复返回或落日志
+- 为阶段 4 的"分层拼装"提供结构化输入
+
+**注意**：
+- 3b–3d 都会增加首字延迟，必须跑在 `boundedElastic` 上，并设超时与降级（检索失败 → 不注入，对话照常）
+- RAG 目前是 advisor；阶段 4 收编成手动拼装时再改
 
 ### 阶段 4：上下文拼装（收口）
 - 抽独立 `ContextAssembler`，把以下拼进 prompt（分层）：
-  1. System 角色（已有 defaultSystem）
+  1. System 角色（当前由记忆装配层产出）
   2. 用户画像摘要
   3. 当前情绪状态（情绪 JSON）
   4. 记忆摘要（summary）
   5. RAG 检索结果
-  6. 最近对话（memory advisor 自动注入）
+  6. 最近对话（当前由 `prepare` 装配）
 - **注意 token 预算**，按需注入，避免上下文溢出
 
 ### 阶段 5：接口文档
@@ -486,7 +528,11 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 - [ ] `logging.level.ConsultationMessageMapper: debug` 仅用于本地调试，上线前需关闭。
 - [ ] 情绪分析为流结束后异步执行，客户端断连（CANCEL）时不触发，属预期行为。
 - [ ] 仓库未提供 Maven Wrapper（`mvnw` / `mvnw.cmd`），需本机安装 Maven 3.9+ 后执行 `mvn clean spring-boot:run`，或后续补 wrapper。
-- [ ] 记忆层接线（M3 骨架已就绪，尚未启用）：`ChatClientConfig` 摘掉 `MessageChatMemoryAdvisor` → `PsychologicalSupportService` 改用 `memoryService.prepare/record` → `deleteSession` 调 `clear` → 实现 `assemble` / `prepare` / `record` / 压缩。
+- [x] ~~记忆层接线~~：已完成——`chat` 去掉 advisor 与 `defaultSystem`；`prepare` 移到归属校验之后并在 `boundedElastic` 上执行；流结束后在同一个 Mono 内完成 record → AI 落库 → 情绪分析 → 压缩。
+- [x] ~~摘要双写 MySQL~~：已完成——压缩时写顺序为 MySQL（真源，失败即停）→ Redis → 裁消息；`prepare` 时 Redis 摘要为空则回落 MySQL 并回填。
+- [ ] **压缩防重入锁（必做）**：当前 `compactIfNeeded` 无锁，用户连发两条时两个请求可能同时压缩，后写的摘要覆盖先写的。单机用本地 `Set`（`ConcurrentHashMap.newKeySet()` + `finally` 移除）即可；多实例部署再换 Redis `SET NX EX`。
+- [ ] 压缩 Prompt 待调：实测摘要里出现"新增对话中"这类元描述，且长度 549 字超过 300 字约束；需在 `MEMORY_COMPACT_PROMPT` 中加"不要提及摘要 / 对话 / 输入等元信息"，并收紧字数。
+- [ ] RAG 启动期强依赖 embedding key：`initializeSchema(true)` 需要向量维度，会真的调一次 embedding 接口，key 无效会直接导致**启动失败**（已踩过一次）；考虑改成懒初始化或失败降级。
 
 ---
 

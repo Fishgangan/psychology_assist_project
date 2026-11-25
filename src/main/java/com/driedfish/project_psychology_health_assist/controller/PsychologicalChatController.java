@@ -1,8 +1,6 @@
 package com.driedfish.project_psychology_health_assist.controller;
 
 import cn.hutool.json.JSONUtil;
-import com.auth0.jwt.interfaces.DecodedJWT;
-import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.driedfish.project_psychology_health_assist.AIService.PsychologicalSupportService;
 import com.driedfish.project_psychology_health_assist.AIService.StructOutPut;
 import com.driedfish.project_psychology_health_assist.annotation.CheckSessionOwner;
@@ -11,19 +9,16 @@ import com.driedfish.project_psychology_health_assist.common.DTO.command.Consult
 import com.driedfish.project_psychology_health_assist.common.Result;
 import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
-import com.driedfish.project_psychology_health_assist.util.JwtTokenUtil;
 import com.driedfish.project_psychology_health_assist.util.SecurityUtils;
 import jakarta.validation.Valid;
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.http.MediaType;
 import org.springframework.http.codec.ServerSentEvent;
 import org.springframework.web.bind.annotation.*;
 import reactor.core.publisher.Flux;
 
 import java.time.Duration;
-import java.util.List;
 import java.util.Map;
 @Slf4j
 @RestController

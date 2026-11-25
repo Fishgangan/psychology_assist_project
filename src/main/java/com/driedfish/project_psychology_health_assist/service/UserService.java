@@ -1,6 +1,5 @@
 package com.driedfish.project_psychology_health_assist.service;
 
-import cn.hutool.json.JSONUtil;
 import com.baomidou.mybatisplus.core.conditions.query.LambdaQueryWrapper;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.LoginCommandDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.PasswordUpdateDTO;
@@ -17,7 +16,6 @@ import com.driedfish.project_psychology_health_assist.common.exception.BusinessE
 import com.driedfish.project_psychology_health_assist.mapper.UserMapper;
 import com.driedfish.project_psychology_health_assist.service.convert.UserConvert;
 import com.driedfish.project_psychology_health_assist.util.JwtTokenUtil;
-import com.driedfish.project_psychology_health_assist.util.SecurityUtils;
 import lombok.RequiredArgsConstructor;
 import org.springframework.security.crypto.bcrypt.BCryptPasswordEncoder;
 import org.springframework.stereotype.Service;

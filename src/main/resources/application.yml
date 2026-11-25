@@ -43,6 +43,11 @@ jwt:
 mybatis-plus:
   configuration:
     map-underscore-to-camel-case: true
+memory:
+  window: 30
+  compact:
+    threshold: 30
+    keep: 10
 logging:
   level:
     ConsultationMessageMapper: debug

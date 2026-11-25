@@ -1,6 +1,5 @@
 package com.driedfish.project_psychology_health_assist.controller;
 
-import com.auth0.jwt.interfaces.DecodedJWT;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.LoginCommandDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.PasswordUpdateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.RegisterCommandDTO;
@@ -8,7 +7,6 @@ import com.driedfish.project_psychology_health_assist.common.DTO.command.UserUpd
 import com.driedfish.project_psychology_health_assist.common.DTO.response.UserDetailDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.UserLoginResponseDTO;
 import com.driedfish.project_psychology_health_assist.common.Result;
-import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.service.UserService;
 import com.driedfish.project_psychology_health_assist.util.JwtTokenUtil;
 import com.driedfish.project_psychology_health_assist.util.SecurityUtils;

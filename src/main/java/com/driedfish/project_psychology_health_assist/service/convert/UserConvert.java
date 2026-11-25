@@ -1,12 +1,9 @@
 package com.driedfish.project_psychology_health_assist.service.convert;
 
 import com.driedfish.project_psychology_health_assist.common.DTO.command.RegisterCommandDTO;
-import com.driedfish.project_psychology_health_assist.common.DTO.command.UserUpdateCommandDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.UserDetailDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.UserLoginResponseDTO;
 import com.driedfish.project_psychology_health_assist.common.entity.User;
-import com.driedfish.project_psychology_health_assist.enumClass.UserStatus;
-import com.driedfish.project_psychology_health_assist.enumClass.UserType;
 
 import java.time.LocalDateTime;
 

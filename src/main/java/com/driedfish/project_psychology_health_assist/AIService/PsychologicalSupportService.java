@@ -1,7 +1,7 @@
 package com.driedfish.project_psychology_health_assist.AIService;
+import com.driedfish.project_psychology_health_assist.AIService.memory.ConversationMemoryService;
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
-import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
@@ -10,7 +10,7 @@ import com.driedfish.project_psychology_health_assist.util.SessionUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
-import org.springframework.ai.chat.memory.ChatMemory;
+import org.springframework.ai.chat.messages.Message;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -22,6 +22,7 @@ import reactor.core.publisher.SignalType;
 import reactor.core.scheduler.Schedulers;
 
 import java.io.IOException;
+import java.util.List;
 
 @Slf4j
 @Service
@@ -33,12 +34,14 @@ public class PsychologicalSupportService {
     private final ConsultationSessionService consultationSessionService;
     private final ConsultationMessageService consultationMessageService;
     private final EmotionAnalysisService emotionAnalysisService;
+    private final ConversationMemoryService conversationMemoryService;
     public PsychologicalSupportService(
             @Qualifier("chat") ChatClient chatClient,
             QuestionAnswerAdvisor questionAnswerAdvisor,
             ConsultationSessionService consultationSessionService,
             ConsultationMessageService consultationMessageService,
-            EmotionAnalysisService emotionAnalysisService
+            EmotionAnalysisService emotionAnalysisService,
+            ConversationMemoryService conversationMemoryService
                ){
 
         this.chatClient=chatClient;
@@ -46,6 +49,7 @@ public class PsychologicalSupportService {
         this.consultationSessionService=consultationSessionService;
         this.consultationMessageService=consultationMessageService;
         this.emotionAnalysisService=emotionAnalysisService;
+        this.conversationMemoryService=conversationMemoryService;
 
     }
 
@@ -75,7 +79,7 @@ public class PsychologicalSupportService {
     public Flux<String> streamPsychologicalChat(String sessionId,String userMessage,Long userId) {
 
         Long dbSessionId = SessionUtils.extractSessionId(sessionId);
-        String conversationId="conversation_"+sessionId;
+        String conversationId = SessionUtils.conversationId(sessionId);
 
         //用Mono.fromCallable创建响应流 把SQL操作放到Callable中，防止阻塞主线程，导致响应延迟
         return Mono.fromCallable(()->{
@@ -103,30 +107,39 @@ public class PsychologicalSupportService {
                 .flatMapMany(userMessageId ->{
                     StringBuilder aiResponse=new StringBuilder();
                     //调用AI助手
+                    List<Message> messages = conversationMemoryService.prepare(conversationId, dbSessionId, userMessage);
                     return chatClient.prompt()
-                                .user(userMessage)
-                                .advisors(advisorSpec -> advisorSpec.param(ChatMemory.CONVERSATION_ID,conversationId).advisors(questionAnswerAdvisor))
+                                .messages(messages)
+                                .advisors(advisorSpec -> advisorSpec.advisors(questionAnswerAdvisor))
                                 .stream()
                                 .content()
                             // 处理流式响应
                                 .doOnNext(fragment-> aiResponse.append(fragment))
                                 .doOnComplete(()->{
                                     String completeRes=aiResponse.toString();
-                                    if(StringUtils.hasText(completeRes)){
+                                        //记录本轮 AI 回复（流结束后调用）
                                         //用Mono.fromRunnable创建响应流 把SQL操作放到Runnable中，防止阻塞主线程，导致响应延迟
                                         Mono.fromRunnable(()->{
-                                            consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);
+                                            if(StringUtils.hasText(completeRes)){
+                                                conversationMemoryService.record(conversationId, completeRes);
+                                                consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);}
                                             //分析用户情绪
                                             String emotionTag = emotionAnalysisService.updateMessageEmotionTag(userMessageId, userMessage);
 
                                             //更新会话情绪分析(json)
                                             emotionAnalysisService.updateSessionEmotionAnalysis(dbSessionId, userMessage, emotionTag);
+                                            conversationMemoryService.compactIfNeeded(conversationId, dbSessionId);
 
-                                        }).subscribeOn(Schedulers.boundedElastic())
+
+                                        }
+                                        ).subscribeOn(Schedulers.boundedElastic())
                                                 .doOnError(error->{
                                                     log.error("保存AI助手消息到Message表失败",error);
                                                 })
-                                                .subscribe();}})
+                                                .subscribe();
+
+                                        }
+                                        )
 
 
                                 .doOnError(error->{
@@ -156,6 +169,7 @@ public class PsychologicalSupportService {
         consultationSessionService.checkSessionOwner(dbSessionId,userId);
         consultationMessageService.deleteMessagesBySessionId(dbSessionId);
         consultationSessionService.deleteSession(dbSessionId);
+        conversationMemoryService.clear(SessionUtils.conversationId(sessionId));
     }
 
 

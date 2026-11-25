@@ -81,7 +81,10 @@ public class ConsultationSessionService {
         //根据用户ID查询会话
         LambdaQueryWrapper<ConsultationSession> queryWrapper = new LambdaQueryWrapper<>();
         queryWrapper.eq(ConsultationSession::getUserId, userId)
-                .orderByAsc(ConsultationSession::getStartedAt);
+                .orderByAsc(ConsultationSession::getStartedAt)
+                .select(ConsultationSession::getId,
+                        ConsultationSession::getSessionTitle,
+                        ConsultationSession::getStartedAt);
         Page<ConsultationSession> resultPage = consultationSessionMapper.selectPage(page, queryWrapper);
         //返回分页结果
         List<ConsultationSession> sessionList = resultPage.getRecords();
@@ -162,6 +165,23 @@ public class ConsultationSessionService {
                 .eq(ConsultationSession::getId, sessionId)
                 .set(ConsultationSession::getLastEmotionAnalysis, analysis)
                 .set(ConsultationSession::getLastEmotionUpdatedAt, LocalDateTime.now()));
+    }
+
+    //更新会话记忆摘要：MySQL 是真源，Redis 只是快路径
+    public void updateMemorySummary(Long sessionId, String summary) {
+        consultationSessionMapper.update(new LambdaUpdateWrapper<ConsultationSession>()
+                .eq(ConsultationSession::getId, sessionId)
+                .set(ConsultationSession::getMemorySummary, summary)
+                .set(ConsultationSession::getMemorySummaryUpdatedAt, LocalDateTime.now()));
+    }
+
+    //读取会话记忆摘要：Redis 里的摘要缺失（过期/被清）时回落用
+    public String getMemorySummary(Long sessionId) {
+        ConsultationSession session = consultationSessionMapper.selectOne(
+                new LambdaQueryWrapper<ConsultationSession>()
+                        .select(ConsultationSession::getMemorySummary)
+                        .eq(ConsultationSession::getId, sessionId));
+        return session == null ? null : session.getMemorySummary();
     }
 
 }

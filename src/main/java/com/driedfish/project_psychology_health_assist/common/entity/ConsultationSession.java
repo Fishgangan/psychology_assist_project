@@ -34,5 +34,11 @@ public class ConsultationSession {
     // 最后一次情绪分析更新时间
     private LocalDateTime lastEmotionUpdatedAt;
 
+    // 记忆摘要（与 Redis chat_summary 双写，MySQL 为真源）
+    private String memorySummary;
+
+    // 摘要更新时间
+    private LocalDateTime memorySummaryUpdatedAt;
+
 
 }
