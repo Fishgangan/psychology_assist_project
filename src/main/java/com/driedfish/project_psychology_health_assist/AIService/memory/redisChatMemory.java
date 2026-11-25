@@ -1,4 +1,4 @@
-package com.driedfish.project_psychology_health_assist.AIService;
+package com.driedfish.project_psychology_health_assist.AIService.memory;
 import org.springframework.ai.chat.memory.ChatMemory;
 import org.springframework.ai.chat.messages.AssistantMessage;
 import org.springframework.ai.chat.messages.Message;
@@ -45,7 +45,7 @@ public class redisChatMemory implements ChatMemory {
                 if (type==MessageType.USER){
                     messages.add(new UserMessage(text));
                 }
-                else if (type==MessageType.ASSISTANT){
+                else if (type== MessageType.ASSISTANT){
                         messages.add(new AssistantMessage(text));
                     }
             }

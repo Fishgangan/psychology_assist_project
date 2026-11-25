@@ -19,6 +19,8 @@ spring:
         model: qwen3.8-flash
       emotionComplete:
         model: qwen3.8-flash
+      memoryCompact:
+        model: qwen3.8-flash
       embedding:
         options:
           model: BAAI/bge-m3

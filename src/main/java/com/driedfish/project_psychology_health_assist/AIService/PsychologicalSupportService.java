@@ -115,7 +115,7 @@ public class PsychologicalSupportService {
                                     if(StringUtils.hasText(completeRes)){
                                         //用Mono.fromRunnable创建响应流 把SQL操作放到Runnable中，防止阻塞主线程，导致响应延迟
                                         Mono.fromRunnable(()->{
-                                            ConsultationMessage message = consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);
+                                            consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);
                                             //分析用户情绪
                                             String emotionTag = emotionAnalysisService.updateMessageEmotionTag(userMessageId, userMessage);
 

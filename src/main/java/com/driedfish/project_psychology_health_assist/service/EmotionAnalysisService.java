@@ -3,6 +3,7 @@ import com.driedfish.project_psychology_health_assist.AIService.PromptManage;
 import com.driedfish.project_psychology_health_assist.AIService.RiskAssessor;
 import com.driedfish.project_psychology_health_assist.common.DTO.internal.EmotionResult;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
+import com.driedfish.project_psychology_health_assist.enumClass.RiskLevel;
 import com.fasterxml.jackson.databind.ObjectMapper;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
@@ -61,34 +62,37 @@ public class EmotionAnalysisService {
             List<ConsultationMessageResponseDTO> recent =
                     consultationMessageService.getRecentMessages(dbSessionId, 10);
 
-        if (recent == null || recent.isEmpty()) return;
+            if (recent == null || recent.isEmpty()) return;
 
-        String content = emotionCompleteClient.prompt()
-                .user(buildEmotionAnalysisPrompt(recent))
-                .call()
-                .content();
+            String content = emotionCompleteClient.prompt()
+                    .user(buildEmotionAnalysisPrompt(recent))
+                    .call()
+                    .content();
 
-        EmotionResult analysis = parseEmotionJson(content);
-        if (analysis == null) {
-            log.warn("情绪分析 JSON 解析失败，原始返回：{}", content);
-            return;
-        }
+            EmotionResult analysis = parseEmotionJson(content);
+            if (analysis == null) {
+                log.warn("情绪分析 JSON 解析失败，原始返回：{}", content);
+                return;
+            }
 
-        // 规则引擎兜底 riskLevel
-        int riskLevelMessage = riskAssessor.assess(userMessage);
-        int riskLevelEmotion = Math.max(riskAssessor.assessByEmotion(emotionTag),
-                riskAssessor.assessByEmotion(analysis.getPrimaryEmotion()));
-        int riskModelLevel=analysis.getRiskLevel()==null?0:analysis.getRiskLevel();
-        int riskLevel = Math.max(Math.max(riskLevelMessage, riskLevelEmotion), riskModelLevel);
+            // 规则引擎兜底 riskLevel
+            int riskLevelMessage = riskAssessor.assess(userMessage);
+            int riskLevelEmotion = Math.max(riskAssessor.assessByEmotion(emotionTag),
+                    riskAssessor.assessByEmotion(analysis.getPrimaryEmotion()));
+            int riskModelLevel = analysis.getRiskLevel() == null ? 0 : analysis.getRiskLevel();
+            int riskLevel = Math.max(Math.max(riskLevelMessage, riskLevelEmotion), riskModelLevel);
             if (Boolean.TRUE.equals(analysis.getIsNegative()) && riskLevel == 0) {
                 riskLevel = 1;
             }
-        analysis.setRiskLevel(riskLevel);
-        analysis.setTimestamp(System.currentTimeMillis());
+            // 数值与文案取自同一个枚举常量，保证二者同源（模型越界值由 fromCode 收敛）
+            RiskLevel riskLevelEnum = RiskLevel.fromCode(riskLevel);
+            analysis.setRiskLevel(riskLevelEnum.getCode());
+            analysis.setRiskDescription(riskLevelEnum.getDescription());
+            analysis.setTimestamp(System.currentTimeMillis());
 
-        consultationSessionService.addLastEmotionAnalysis(
-                dbSessionId, objectMapper.writeValueAsString(analysis));
-        log.info("session 情绪分析：{}", analysis);
+            consultationSessionService.addLastEmotionAnalysis(
+                    dbSessionId, objectMapper.writeValueAsString(analysis));
+            log.info("session 情绪分析：{}", analysis);
         }catch (Exception e){
             log.warn("session 情绪总结失败",e);
 

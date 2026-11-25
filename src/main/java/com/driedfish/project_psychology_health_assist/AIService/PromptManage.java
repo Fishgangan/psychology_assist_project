@@ -46,7 +46,7 @@ public class PromptManage {
                    - keywords: 与情绪相关的关键词数组
                    - riskLevel: 风险等级，0(情绪稳定)/1(需要关注)/2(需要心理疏导)。
                      请特别注意识别隐晦的自伤、自杀意念（如"不想撑了""想消失""不配活着""活着好累"），不要只依赖显性词汇。
-                   - riskDescription: 风险等级的文字原因
+                   - riskDescription: 先填 null，最终由系统规则决定。
                    - timestamp: 先填 0 占位（最终由系统时间决定）
                    - isNegative: 是否负面情绪，true/false
                    - suggestion: 一句安抚建议
@@ -54,8 +54,31 @@ public class PromptManage {
                    - primaryEmotion: 主要情绪
                    - improvementSuggestions: 改善建议数组（2-4条）
                 3. 输出示例：
-                   {"icon":"😔","label":"低落","keywords":["心情","不好"],"riskLevel":0,"riskDescription":"用户没有显示任何风险信号","timestamp":0,"isNegative":true,"suggestion":"抱抱你，不开心的时候可以找朋友聊聊","emotionScore":45,"primaryEmotion":"悲伤","improvementSuggestions":["深呼吸放松","听首喜欢的歌","写写心情日记"]}
+                   {"icon":"😔","label":"低落","keywords":["心情","不好"],"riskLevel":0,"riskDescription":null,"timestamp":0,"isNegative":true,"suggestion":"抱抱你，不开心的时候可以找朋友聊聊","emotionScore":45,"primaryEmotion":"悲伤","improvementSuggestions":["深呼吸放松","听首喜欢的歌","写写心情日记"]}
         
                 用户最近消息（格式：[情绪标签] 消息内容）：
+                """;
+
+        // 记忆压缩：旧摘要 + 新增对话 → 新摘要（纯文本，非 JSON）
+        public static final String MEMORY_COMPACT_PROMPT = """
+                你是一名心理对话的记忆整理助手。你的任务是把「旧摘要」与「新增对话」合并成一份新的记忆摘要，供后续对话继续使用。
+
+                严格要求：
+                1. 只输出摘要正文，不要输出标题、序号、解释说明、前后缀或 markdown 代码块标记。
+                2. 只能基于输入内容整理，禁止编造、推测或补充对话中没有出现的信息；没有把握的细节直接省略。
+                3. 不做心理诊断、不给建议、不评价用户，只做中性的事实与状态陈述。
+                4. 有则保留、无则省略：
+                   - 用户的核心困扰与主诉（学业 / 人际 / 家庭 / 情绪）
+                   - 关键人物、事件、时间点（如"考研""室友""上周三"）
+                   - 用户的目标、计划、已尝试过的应对方式及其效果
+                   - 情绪变化轨迹（从…到…）
+                   - 风险信号（自伤、自杀、绝望等表述），关键措辞要原样保留
+                   - 助手已给出的建议，以及引导用户去做但尚未完成的事
+                5. 忽略寒暄、重复确认、无信息量的客套。
+                6. 用简体中文、第三人称陈述，控制在 300 字以内；把旧摘要改写成一段连贯的文字，不要出现"旧摘要说…"这类痕迹。
+                7. 旧摘要与新增对话冲突时，以新增对话为准。
+                8. 若确实没有任何值得保留的信息，只输出：无
+
+                旧摘要与新增对话如下：
                 """;
 }
