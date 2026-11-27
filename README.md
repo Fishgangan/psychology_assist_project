@@ -63,8 +63,15 @@
 
 ### 7. 长期记忆与 RAG
 
-- **长期记忆**：Spring AI 1.0.3 未提供原生 Redis ChatMemory，项目手搓 `RedisChatMemory` 实现 `ChatMemory` 接口——基于 Redis List 存储、保留最近 N 条、设置 TTL，由记忆 Advisor 自动读写。
-- **RAG**：Redis 向量库 + `QuestionAnswerAdvisor`，将知识库检索结果注入对话上下文。
+- **长期记忆（分层实现）**：`AIService/memory` 下由 `Store`（Redis 双 key）、`Assembler`（快照 → messages）、`Compactor`（增量压缩）、`Facade`（门面）四层组成。
+  - 消息存 `chat_memory:<id>`（LIST，7 天，保留最近 N 条），摘要在压缩后写 `chat_summary:<id>`（STRING，30 天）；
+  - 摘要**双写 MySQL** `consultation_session.memory_summary` 作为真源，Redis 只是快路径；Redis 摘要缺失时回落 MySQL 并回填；
+  - 采用「增量压缩」：旧摘要 + 最旧一段对话 → 新摘要，失败不删原始消息；
+  - 不使用 Spring AI 的 `ChatMemory` 接口——它只能装 `Message`，装不下摘要。
+- **RAG**：Redis 向量库 + `QuestionAnswerAdvisor`（topK=3）。
+  - 语料分层：WHO 中文实况报道 8 篇 + 教育部纲要 + 心理健康素养十条 + 12356 热线 + 问答语料，约 132 块；
+  - 切块策略可插拔（`DocumentChunker`：标题切块 / 问答切块），固定 id 保证重复启动是覆盖而非追加；
+  - 语料来源与许可见 [docs/RAG_SOURCES.md](docs/RAG_SOURCES.md)，检索效果基线见 [docs/rag-baseline.md](docs/rag-baseline.md)。
 
 ## 核心技术栈
 
@@ -90,20 +97,21 @@
 - [x] 会话管理：创建、删除、分页列表（N+1 已修复，固定 2 次查询）
 - [x] 消息管理：分页查询、保存，用户资料局部更新
 - [x] SSE 流式对话（Flux + boundedElastic + 断连处理）
-- [x] 手搓 RedisChatMemory 长期记忆
+- [x] 记忆分层：Redis 双 key + 增量压缩 + 摘要双写 MySQL + 缺失回落（替代 `ChatMemory` 接口）
 - [x] 消息级情绪标签（`message.emotion_tag`）
 - [x] 会话级情绪分析 JSON（`session.last_emotion_analysis`）
 - [x] 风险分级三方融合（关键词 + 情绪 + 大模型）
 - [x] `riskLevel` / `riskDescription` 同源产出（`RiskLevel` 枚举）
-- [x] RAG 基础检索（RedisVectorStore + QuestionAnswerAdvisor）
+- [x] RAG 基础检索（RedisVectorStore + QuestionAnswerAdvisor，topK=3）
+- [x] RAG 语料分层与切块：WHO 8 篇 + 教育部纲要 + 素养十条 + 12356 热线，可插拔切块器 + 幂等入库
+- [x] RAG 检索基线（`docs/rag-baseline.md`）
 
 **规划中**
 
-- [ ] Redis 记忆压缩/摘要（增量压缩、`SUMMARY|` 标记、摘要 + 近 K 条并存）
 - [ ] 用户画像（静态 + 动态：情绪分布 / 主题 / 趋势）
 - [ ] RAG 升级（Query 改写 → 多路召回 → Rerank）
 - [ ] 上下文拼装（画像 + 情绪 + 记忆摘要 + RAG 分层注入提示词）
-- [ ] 危机干预闭环（高危话术 + 求助热线 + 事件记录）
+- [ ] 危机干预闭环（高危话术 + 求助热线 + 事件记录 + 高风险场景跳过 RAG）
 - [ ] 接口文档（SpringDoc / OpenAPI 3）
 
 ## 核心接口说明

@@ -200,8 +200,13 @@ src/main/java/com/driedfish/project_psychology_health_assist/
 │   ├── PsychologicalChatController.java # 心理对话接口（含 SSE）
 │   └── UserController.java              # 认证与用户接口
 ├── rag/
-│   ├── RagDataInitializer.java          # 知识库数据初始化入库
-│   └── config/RagConfig.java            # JedisPooled + RedisVectorStore 手动装配
+│   ├── RagDataInitializer.java          # 启动触发入库（失败不阻断启动）
+│   ├── RagIngestionService.java         # 扫目录 → 选切块策略 → 写入向量库（固定 id，幂等）
+│   ├── chunk/
+│   │   ├── DocumentChunker.java         # 切块接口：换数据源只加实现
+│   │   ├── MarkdownHeadingChunker.java  # 按 ## 小节切，超长再按段落切
+│   │   └── QaChunker.java               # 按「问：」切（问答语料）
+│   └── config/RagConfig.java            # JedisPooled + RedisVectorStore + QuestionAnswerAdvisor(topK)
 ├── service/
 │   ├── ConsultationSessionService.java  # 会话 CRUD、越权校验、情绪分析落库、会话分页
 │   ├── ConsultationMessageService.java  # 消息 CRUD、情绪标签落库、最近 N 条查询
@@ -228,8 +233,19 @@ src/main/java/com/driedfish/project_psychology_health_assist/
     ├── JwtTokenUtil.java                # 签发 / 校验
     ├── ResponseUtil.java
     ├── SecurityUtils.java               # 当前登录用户
-    └── SessionUtils.java                # sessionId 与 dbSessionId 互转
+    └── SessionUtils.java                # sessionId ↔ dbSessionId、conversationId 统一生成
 ```
+
+资源目录（RAG 语料）：
+
+```
+src/main/resources/data/
+├── rag/who/       # WHO 中文实况报道 8 篇（精神卫生、抑郁、焦虑、青少年、总览、自杀、双相、PTSD）
+├── rag/cn/        # 教育部纲要、心理健康素养十条、12356 热线
+└── psychology_data.txt   # 问答式测试语料（议题层）
+```
+
+> 语料来源、许可与新增流程见 [RAG_SOURCES.md](RAG_SOURCES.md)；检索效果基线见 [rag-baseline.md](rag-baseline.md)。
 
 ### 5.1 关键类职责
 
@@ -237,7 +253,8 @@ src/main/java/com/driedfish/project_psychology_health_assist/
 - **`EmotionAnalysisService`**：`updateMessageEmotionTag`（单条标签）+ `updateSessionEmotionAnalysis`（会话总结 JSON）+ 私有 `buildEmotionAnalysisPrompt` / `parseEmotionJson`。
 - **`RiskAssessor`**：`assess(message)` 关键词扫描；`assessByEmotion(tag)` 情绪映射。纯规则，可单测。
 - **`RiskLevel`**：风险等级枚举。`fromCode` 对越界值收敛（>2 按最高等级、<0 按最低），并同时给出 `code` 与 `description`，是 `riskLevel` / `riskDescription` 的**唯一来源**。
-- **`RedisChatMemory`**：`add` 写 Redis List（rightPush + trim 保留最近 N 条 + TTL），`get` 读取并反序列化。
+- **`ConversationMemoryStore` / `ChatContextAssembler` / `MemoryCompactor` / `ConversationMemoryService`**：记忆四层（存取 / 装配 / 压缩 / 门面），详见 §10.3。
+- **`RagIngestionService` + `DocumentChunker`**：启动时扫语料目录，按扩展名选切块策略，以 `source#序号` 固定 id 写入向量库（幂等）。
 
 ---
 
@@ -410,6 +427,9 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 14. `riskLevel` 与 `riskDescription` 同源：统一由 `RiskLevel` 枚举产出（不再使用模型原值）
 15. 记忆分层：`ConversationMemoryStore`（双 key）+ `ChatContextAssembler`（摘要进 system）+ `MemoryCompactor`（增量压缩）+ `ConversationMemoryService`（门面）；摘要双写 MySQL 真源，Redis 缺失时回落
 16. 记忆接线：`chat` 通道移除 advisor 与 defaultSystem，链路改为 `prepare → messages → record → compact`，全部跑在 `boundedElastic` 上
+17. RAG 语料分层：WHO 中文实况报道 8 篇 + 教育部纲要 + 心理健康素养十条 + 12356 热线，入库约 132 块（来源与许可见 `docs/RAG_SOURCES.md`）
+18. RAG 切块与入库：`DocumentChunker` 接口 + 标题切块/问答切块两种实现；固定 id（`source#序号`）实现幂等，重启不再重复灌库
+19. RAG 基线：`docs/rag-baseline.md` 记录检索命中、score、promptTokens，作为后续增强的对比基准
 
 ---
 
@@ -433,10 +453,11 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 现状：`RagConfig` 定义 `VectorStore`（`RedisVectorStore`，`initializeSchema=true`）与 `QuestionAnswerAdvisor`；
 `RagDataInitializer` 灌 `resources/data/psychology_data.txt`；检索结果由 advisor 自动注入 prompt。
 
-**3a 基线摸底（先做，不写新功能）**
-- 准备 10 个典型问题（口语化 / 知识型 / 情绪型各几条），记录当前 topK 实际返回了什么
-- 记录三个数：命中率、首字延迟、注入后的 token 长度
-- 产出一份对比基线，否则后面改动无法判断好坏
+**3a 基线摸底（✅ 已完成）**
+- 已跑 4 组用例：议题型 / 知识型 / 同会话第 3 轮 / 隐晦危机表达
+- 结论记录在 `docs/rag-baseline.md`：知识型命中 WHO，议题型命中问答语料；
+  **危机表达召回失败**（语义相近 ≠ 意图相近），但风险分级与话术正常兜底
+- 遗留：用例 5~7 待补（治疗类 / 跨篇推理 / 失眠）
 
 **3b Query 改写**
 - 新增 `queryRewrite` 通道（`qwen3.8-flash`），把口语化问题改写成检索式
@@ -533,6 +554,11 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 - [ ] **压缩防重入锁（必做）**：当前 `compactIfNeeded` 无锁，用户连发两条时两个请求可能同时压缩，后写的摘要覆盖先写的。单机用本地 `Set`（`ConcurrentHashMap.newKeySet()` + `finally` 移除）即可；多实例部署再换 Redis `SET NX EX`。
 - [ ] 压缩 Prompt 待调：实测摘要里出现"新增对话中"这类元描述，且长度 549 字超过 300 字约束；需在 `MEMORY_COMPACT_PROMPT` 中加"不要提及摘要 / 对话 / 输入等元信息"，并收紧字数。
 - [ ] RAG 启动期强依赖 embedding key：`initializeSchema(true)` 需要向量维度，会真的调一次 embedding 接口，key 无效会直接导致**启动失败**（已踩过一次）；考虑改成懒初始化或失败降级。
+- [ ] **提交前清理调试代码**：`ChatClientConfig` 的 `SimpleLoggerAdvisor(10)` 与 yml 的
+  `org.springframework.ai.chat.client.advisor: DEBUG` 只用于看 prompt，长期开启会刷屏并有开销。
+- [ ] 隐晦危机表达召回：已在 `suicide.md` 补「常见的求助表达」一节（document expansion），待重测；
+  若仍不命中，按 M7 方案让 riskLevel=2 时不走 RAG、直接注入干预模板。
+- [x] ~~历史 token 膨胀~~：`ChatContextAssembler` 装配时把 AI 历史截断到 200 字（用户消息不截）。
 
 ---
 
