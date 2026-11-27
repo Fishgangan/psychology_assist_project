@@ -33,8 +33,8 @@ public class ChatContextAssembler {
             if(entry.type() == MemoryMessageType.USER){
                 messages.add(new UserMessage(entry.content()));
             }else if(entry.type() == MemoryMessageType.AI){
-                messages.add(new AssistantMessage(entry.content()));
-            }
+                messages.add(new AssistantMessage(StringUtils.truncate(entry.content(), 200)));
+                           }
             //window是历史消息数
             if(messages.size() > window+1){
                 // 从最旧的开始裁剪，system 消息不参与裁剪。
