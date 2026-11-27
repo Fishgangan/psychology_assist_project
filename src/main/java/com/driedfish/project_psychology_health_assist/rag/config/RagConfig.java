@@ -2,6 +2,7 @@ package com.driedfish.project_psychology_health_assist.rag.config;
 
 import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.embedding.EmbeddingModel;
+import org.springframework.ai.vectorstore.SearchRequest;
 import org.springframework.ai.vectorstore.VectorStore;
 import org.springframework.ai.vectorstore.redis.RedisVectorStore;
 import org.springframework.beans.factory.annotation.Value;
@@ -27,6 +28,10 @@ public class RagConfig {
     }
     @Bean
     public QuestionAnswerAdvisor questionAnswerAdvisor(VectorStore vectorStore) {
-        return new QuestionAnswerAdvisor(vectorStore);
+        return QuestionAnswerAdvisor.builder(vectorStore)
+                .searchRequest(SearchRequest.builder()
+                        .topK(3)//返回3个最相关的文档
+                        .build())
+                .build();
     }
 }

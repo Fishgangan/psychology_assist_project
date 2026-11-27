@@ -51,3 +51,4 @@ memory:
 logging:
   level:
     ConsultationMessageMapper: debug
+    ##org.springframework.ai.chat.client.advisor: DEBUG

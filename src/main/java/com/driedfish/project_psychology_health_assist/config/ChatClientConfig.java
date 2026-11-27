@@ -1,5 +1,6 @@
 package com.driedfish.project_psychology_health_assist.config;
 import org.springframework.ai.chat.client.ChatClient;
+import org.springframework.ai.chat.client.advisor.SimpleLoggerAdvisor;
 import org.springframework.ai.chat.prompt.ChatOptions;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.context.annotation.Bean;
@@ -12,6 +13,7 @@ public class ChatClientConfig {
     @Bean("chat")
     public ChatClient chatClient(ChatClient.Builder builder) {
         return builder
+                //.defaultAdvisors(new SimpleLoggerAdvisor(10))   // order=10 > RAG 的 0,调试用，注释掉后正常运行
                 .build();
     }
     //情绪标签
