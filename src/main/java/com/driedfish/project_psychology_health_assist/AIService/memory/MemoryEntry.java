@@ -2,11 +2,7 @@ package com.driedfish.project_psychology_health_assist.AIService.memory;
 
 import java.util.Objects;
 
-/**
- * 一条记忆条目：类型 + 正文。
- *
- * <p>这是跨层传递的合同，不依赖 Spring AI 的任何类型 —— 存储层、装配层都只认它。</p>
- */
+// 一条记忆条目：类型 + 正文。跨层传递的合同，不依赖 Spring AI 的任何类型。
 public record MemoryEntry(MemoryMessageType type, String content) {
 
     public MemoryEntry {

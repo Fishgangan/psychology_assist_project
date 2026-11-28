@@ -13,7 +13,10 @@ import java.nio.charset.StandardCharsets;
 import lombok.extern.slf4j.Slf4j;
 
 @Slf4j
-public class ResponseUtil {
+public final class ResponseUtil {
+
+    private ResponseUtil() {
+    }
     //过滤器的异常响应
     public static void writeError(HttpServletResponse response, ResultCode resultCode) {
         // 响应已提交，直接返回,否则若客户端断连，继续处理的话，会导致响应内容继续写入，导致异常

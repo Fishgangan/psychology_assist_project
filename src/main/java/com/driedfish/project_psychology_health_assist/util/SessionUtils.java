@@ -3,7 +3,10 @@ package com.driedfish.project_psychology_health_assist.util;
 import com.driedfish.project_psychology_health_assist.common.ResultCode;
 import com.driedfish.project_psychology_health_assist.common.exception.BusinessException;
 
-public class SessionUtils {
+public final class SessionUtils {
+
+    private SessionUtils() {
+    }
     //获取会话记忆的 key
     public static String conversationId(String sessionId) {
         return "conversation_" + sessionId;

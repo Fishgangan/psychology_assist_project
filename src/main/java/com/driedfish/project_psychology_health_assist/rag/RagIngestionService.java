@@ -19,17 +19,9 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * RAG 入库：扫描资源目录 → 按类型选切块策略 → 写入向量库。
- *
- * <p>目录约定：</p>
- * <ul>
- *   <li>{@code data/rag/**}{@code /*.md} —— 权威文档（WHO 等），按标题切块；</li>
- *   <li>{@code data/*.txt} —— 结构化问答语料，按问答切块。</li>
- * </ul>
- *
- * <p>幂等：切块器按 {@code source#序号} 生成固定 id，重复启动是覆盖而非追加。</p>
- */
+// RAG 入库：扫描资源目录 → 按类型选切块策略 → 写入向量库。
+//   目录约定：data/rag/**/*.md（权威文档，按标题切）/ data/*.txt（问答语料，按问答切）
+//   幂等：切块器按 source#序号 生成固定 id，重复启动是覆盖而不是追加
 @Slf4j
 @Component
 public class RagIngestionService {
@@ -50,11 +42,7 @@ public class RagIngestionService {
         this.qaChunker = qaChunker;
     }
 
-    /**
-     * 加载全部语料并写入向量库。
-     *
-     * @return 写入的块数
-     */
+    // 加载全部语料并写入向量库，返回写入的块数
     public int ingestAll() {
         List<Document> documents = new ArrayList<>();
         documents.addAll(load(MARKDOWN_PATTERN, markdownChunker));

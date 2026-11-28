@@ -3,7 +3,10 @@ package com.driedfish.project_psychology_health_assist.service.convert;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationMessage;
 
-public class MessageConvert {
+public final class MessageConvert {
+
+    private MessageConvert() {
+    }
     public static ConsultationMessageResponseDTO convertToResponseDTO(ConsultationMessage message) {
         if(message == null) {
             return null;

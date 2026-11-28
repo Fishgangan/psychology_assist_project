@@ -8,12 +8,8 @@ import java.util.LinkedHashMap;
 import java.util.List;
 import java.util.Map;
 
-/**
- * 问答切块：按「问：」边界切开，一组问答一块。
- *
- * <p>只适用于结构化问答数据（如当前测试语料、PsyQA）。换成长文时改用
- * {@link MarkdownHeadingChunker}，加载流程不需要改。</p>
- */
+// 问答切块：按「问：」边界切，一组问答一块。
+// 只适用于结构化问答数据（测试语料、PsyQA）；换长文改用 MarkdownHeadingChunker，加载流程不用动。
 @Component
 public class QaChunker implements DocumentChunker {
 

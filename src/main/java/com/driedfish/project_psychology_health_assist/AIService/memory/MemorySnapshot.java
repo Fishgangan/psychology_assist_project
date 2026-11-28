@@ -4,15 +4,8 @@ import org.springframework.util.StringUtils;
 
 import java.util.List;
 
-/**
- * 一次对话的完整记忆快照：历史摘要 + 最近的原始消息。
- *
- * <p>摘要和历史分开存放（Redis 里是两个 key），所以这里也分成两个字段，
- * 让装配层有足够信息决定"摘要放哪、历史放哪"。</p>
- *
- * @param summary 历史摘要，可能为 null 或空串
- * @param entries 原始消息，按时间顺序（最旧 → 最新）
- */
+// 一次对话的记忆快照：历史摘要 + 最近消息。
+// 分成两个字段，因为它们在 Redis 里就是两个 key：摘要可独立过期与覆盖。
 public record MemorySnapshot(String summary, List<MemoryEntry> entries) {
 
     public MemorySnapshot {

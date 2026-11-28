@@ -6,7 +6,10 @@ import com.driedfish.project_psychology_health_assist.common.exception.BusinessE
 import org.springframework.security.core.Authentication;
 import org.springframework.security.core.context.SecurityContextHolder;
 
-public class SecurityUtils {
+public final class SecurityUtils {
+
+    private SecurityUtils() {
+    }
     public static Long getUserId() {
         //从spring security上下文获取当前认证对象
         Authentication authentication = SecurityContextHolder.getContext().getAuthentication();

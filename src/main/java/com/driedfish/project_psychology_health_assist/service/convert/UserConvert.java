@@ -7,7 +7,10 @@ import com.driedfish.project_psychology_health_assist.common.entity.User;
 
 import java.time.LocalDateTime;
 
-public class UserConvert {
+public final class UserConvert {
+
+    private UserConvert() {
+    }
     //用户详情响应DTO
     public static UserDetailDTO entityToDetailResponse(User user){
         return UserDetailDTO.builder()
