@@ -21,6 +21,8 @@ spring:
         model: qwen3.8-flash
       memoryCompact:
         model: qwen3.8-flash
+      turnScreen:
+        model: qwen3.8-flash
       embedding:
         options:
           model: BAAI/bge-m3
@@ -51,4 +53,4 @@ memory:
 logging:
   level:
     ConsultationMessageMapper: debug
-    ##org.springframework.ai.chat.client.advisor: DEBUG
+    org.springframework.ai.chat.client.advisor: DEBUG

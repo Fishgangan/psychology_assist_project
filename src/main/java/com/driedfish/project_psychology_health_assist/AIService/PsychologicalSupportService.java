@@ -3,14 +3,16 @@ import com.driedfish.project_psychology_health_assist.AIService.memory.Conversat
 import com.driedfish.project_psychology_health_assist.common.DTO.command.ConsultationSessionCreateDTO;
 import com.driedfish.project_psychology_health_assist.common.DTO.response.ConsultationMessageResponseDTO;
 import com.driedfish.project_psychology_health_assist.common.entity.ConsultationSession;
+import com.driedfish.project_psychology_health_assist.rag.RagContextService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationMessageService;
 import com.driedfish.project_psychology_health_assist.service.ConsultationSessionService;
 import com.driedfish.project_psychology_health_assist.service.EmotionAnalysisService;
 import com.driedfish.project_psychology_health_assist.util.SessionUtils;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.ai.chat.client.ChatClient;
-import org.springframework.ai.chat.client.advisor.vectorstore.QuestionAnswerAdvisor;
 import org.springframework.ai.chat.messages.Message;
+import org.springframework.ai.chat.messages.SystemMessage;
+import org.springframework.ai.chat.messages.UserMessage;
 import org.springframework.beans.factory.annotation.Qualifier;
 import org.springframework.beans.factory.annotation.Value;
 import org.springframework.stereotype.Service;
@@ -30,26 +32,29 @@ public class PsychologicalSupportService {
     @Value("${spring.ai.open-ai.chat.options.model:qwen3.8-27b}")
     private String currentAiModel;
     private final ChatClient chatClient;
-    private final QuestionAnswerAdvisor questionAnswerAdvisor;
+    private final RagContextService ragContextService;
     private final ConsultationSessionService consultationSessionService;
     private final ConsultationMessageService consultationMessageService;
     private final EmotionAnalysisService emotionAnalysisService;
     private final ConversationMemoryService conversationMemoryService;
+    private final TurnScreenService turnScreenService;
     public PsychologicalSupportService(
             @Qualifier("chat") ChatClient chatClient,
-            QuestionAnswerAdvisor questionAnswerAdvisor,
+            RagContextService ragContextService,
             ConsultationSessionService consultationSessionService,
             ConsultationMessageService consultationMessageService,
             EmotionAnalysisService emotionAnalysisService,
-            ConversationMemoryService conversationMemoryService
+            ConversationMemoryService conversationMemoryService,
+            TurnScreenService turnScreenService
                ){
 
         this.chatClient=chatClient;
-        this.questionAnswerAdvisor=questionAnswerAdvisor;
+        this.ragContextService=ragContextService;
         this.consultationSessionService=consultationSessionService;
         this.consultationMessageService=consultationMessageService;
         this.emotionAnalysisService=emotionAnalysisService;
         this.conversationMemoryService=conversationMemoryService;
+        this.turnScreenService=turnScreenService;
 
     }
 
@@ -107,10 +112,20 @@ public class PsychologicalSupportService {
                 .flatMapMany(userMessageId ->{
                     StringBuilder aiResponse=new StringBuilder();
                     //调用AI助手
+                    // 前置判定：一次小模型调用拿到「风险」「是否需要知识」「检索词」
+                    TurnScreenService.TurnScreen screen = turnScreenService.screen(userMessage);
+                    String knowledge = screen.needKnowledge()
+                            ? ragContextService.buildContext(userMessage, screen.searchQuery())
+                            : null;
                     List<Message> messages = conversationMemoryService.prepare(conversationId, dbSessionId, userMessage);
+                    if (screen.risk() >= 2) {
+                        messages = appendCrisisDirective(messages);
+                    }
+                    if (StringUtils.hasText(knowledge)) {
+                        messages = appendKnowledge(messages, knowledge);
+                    }
                     return chatClient.prompt()
                                 .messages(messages)
-                                .advisors(advisorSpec -> advisorSpec.advisors(questionAnswerAdvisor))
                                 .stream()
                                 .content()
                             // 处理流式响应
@@ -123,11 +138,12 @@ public class PsychologicalSupportService {
                                             if(StringUtils.hasText(completeRes)){
                                                 conversationMemoryService.record(conversationId, completeRes);
                                                 consultationMessageService.saveAiMessage(dbSessionId, completeRes, currentAiModel);}
-                                            //分析用户情绪
-                                            String emotionTag = emotionAnalysisService.updateMessageEmotionTag(userMessageId, userMessage);
-
-                                            //更新会话情绪分析(json)
-                                            emotionAnalysisService.updateSessionEmotionAnalysis(dbSessionId, userMessage, emotionTag);
+                                            //分析用户情绪：只有涉及自身状态时才做，纯知识问答跳过
+                                            if (screen.selfRelated()) {
+                                                String emotionTag = emotionAnalysisService.updateMessageEmotionTag(userMessageId, userMessage);
+                                                //更新会话情绪分析(json)
+                                                emotionAnalysisService.updateSessionEmotionAnalysis(dbSessionId, userMessage, emotionTag);
+                                            }
                                             conversationMemoryService.compactIfNeeded(conversationId, dbSessionId);
 
 
@@ -161,6 +177,26 @@ public class PsychologicalSupportService {
 
 
     }
+
+    // 前置判定为高风险时，把危机提示追加到 system 提示词末尾（保持只有一条 system）
+    private List<Message> appendCrisisDirective(List<Message> messages) {
+        if (messages.isEmpty() || !(messages.get(0) instanceof SystemMessage system)) {
+            return messages;
+        }
+        messages.set(0, new SystemMessage(system.getText() + PromptManage.CRISIS_ROUND_DIRECTIVE));
+        return messages;
+    }
+
+    // 把参考资料拼到当前用户消息后面（最后一条一定是 appendCurrentUserMessage 加的那句）
+    private List<Message> appendKnowledge(List<Message> messages, String knowledge) {
+        int lastIndex = messages.size() - 1;
+        if (lastIndex < 0 || !(messages.get(lastIndex) instanceof UserMessage userMessage)) {
+            return messages;
+        }
+        messages.set(lastIndex, new UserMessage(userMessage.getText() + "\n\n" + knowledge));
+        return messages;
+    }
+
     //删除会话
     @Transactional(rollbackFor = Exception.class)
     public void deleteSession(String sessionId,Long userId) {

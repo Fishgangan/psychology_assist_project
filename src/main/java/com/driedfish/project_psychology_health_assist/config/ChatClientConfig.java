@@ -13,7 +13,7 @@ public class ChatClientConfig {
     @Bean("chat")
     public ChatClient chatClient(ChatClient.Builder builder) {
         return builder
-                //.defaultAdvisors(new SimpleLoggerAdvisor(10))   // order=10 > RAG 的 0,调试用，注释掉后正常运行
+                .defaultAdvisors(new SimpleLoggerAdvisor(10))   // order=10 > RAG 的 0,调试用，注释掉后正常运行
                 .build();
     }
     //情绪标签
@@ -38,6 +38,14 @@ public class ChatClientConfig {
                                                 @Value("${spring.ai.open-ai.memoryCompact.model:qwen3.8-flash}") String memoryCompactAiModel) {
         return builder
                 .defaultOptions(ChatOptions.builder().model(memoryCompactAiModel).build())
+                .build();
+    }
+    //回合前置判定（风险 + 是否检索）
+    @Bean("turnScreen")
+    public ChatClient turnScreenChatClient(ChatClient.Builder builder,
+                                           @Value("${spring.ai.open-ai.turnScreen.model:qwen3.8-flash}") String turnScreenAiModel) {
+        return builder
+                .defaultOptions(ChatOptions.builder().model(turnScreenAiModel).build())
                 .build();
     }
 }
