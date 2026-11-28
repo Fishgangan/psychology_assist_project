@@ -22,4 +22,7 @@ logs/
 .DS_Store
 Thumbs.db
 
+# 个人学习笔记（不随仓库提交）
+学习笔记.md
+
 

@@ -46,7 +46,9 @@
 ### 5. AI 编排：多通道 ChatClient 与 Advisor 治理
 
 - 拆分为三个独立 ChatClient 通道，按职责隔离：
-  - `chat`：主对话，挂载 `MessageChatMemoryAdvisor`（Redis 长期记忆）与请求级 `QuestionAnswerAdvisor`（RAG 检索）。
+- **`chat` 通道**：纯 builder——**不挂记忆 advisor、不挂 RAG advisor**；system 提示词与参考资料由装配层/检索层手动拼进 messages。
+  - 记忆：`ConversationMemoryService.prepare` 产出 messages（system + 历史 + 当前句）；
+  - 检索：`TurnScreenService` 判定是否需要知识，`RagContextService` 检索并拼「参考资料」。
   - `emotionTag`：单条情绪标签，独立模型、无记忆 Advisor，避免污染对话记忆。
   - `emotionComplete`：会话级情绪总结（JSON），同样独立隔离。
 - Prompt 统一收敛至 `PromptManage`，业务代码不散落魔法字符串。
@@ -68,9 +70,12 @@
   - 摘要**双写 MySQL** `consultation_session.memory_summary` 作为真源，Redis 只是快路径；Redis 摘要缺失时回落 MySQL 并回填；
   - 采用「增量压缩」：旧摘要 + 最旧一段对话 → 新摘要，失败不删原始消息；
   - 不使用 Spring AI 的 `ChatMemory` 接口——它只能装 `Message`，装不下摘要。
-- **RAG**：Redis 向量库 + `QuestionAnswerAdvisor`（topK=3）。
+- **RAG**：Redis 向量库 + 手动检索（`RagContextService`）。
+  - **条件检索**：`TurnScreenService` 一次小模型调用产出 `{risk, needKnowledge, searchQuery}`——闲聊和危机场景不检索，知识型问题才查；
+  - **Query 改写**：口语/英文问题改写成 3~10 字中文检索词，英文提问也能落到中文语料；
   - 语料分层：WHO 中文实况报道 8 篇 + 教育部纲要 + 心理健康素养十条 + 12356 热线 + 问答语料，约 132 块；
   - 切块策略可插拔（`DocumentChunker`：标题切块 / 问答切块），固定 id 保证重复启动是覆盖而非追加；
+  - **待补**：检索结果后处理（去重/截断/总量上限）、多路召回、rerank；
   - 语料来源与许可见 [docs/RAG_SOURCES.md](docs/RAG_SOURCES.md)，检索效果基线见 [docs/rag-baseline.md](docs/rag-baseline.md)。
 
 ## 核心技术栈
@@ -102,13 +107,14 @@
 - [x] 会话级情绪分析 JSON（`session.last_emotion_analysis`）
 - [x] 风险分级三方融合（关键词 + 情绪 + 大模型）
 - [x] `riskLevel` / `riskDescription` 同源产出（`RiskLevel` 枚举）
-- [x] RAG 基础检索（RedisVectorStore + QuestionAnswerAdvisor，topK=3）
+- [x] RAG 基础检索（RedisVectorStore + `RagContextService` 手动检索，替代 advisor）
+- [x] 回合前置判定：模型输出 `risk / needKnowledge / searchQuery`（危机与闲聊不检索）
 - [x] RAG 语料分层与切块：WHO 8 篇 + 教育部纲要 + 素养十条 + 12356 热线，可插拔切块器 + 幂等入库
 - [x] RAG 检索基线（`docs/rag-baseline.md`）
 
 **规划中**
 
-- [ ] 用户画像（静态 + 动态：情绪分布 / 主题 / 趋势）
+- [ ] 用户记忆库（语义记忆：称呼 / 专业 / 爱好 / 目标，按 fact_key 覆盖）+ 由它派生的画像视图
 - [ ] RAG 升级（Query 改写 → 多路召回 → Rerank）
 - [ ] 上下文拼装（画像 + 情绪 + 记忆摘要 + RAG 分层注入提示词）
 - [ ] 危机干预闭环（高危话术 + 求助热线 + 事件记录 + 高风险场景跳过 RAG）

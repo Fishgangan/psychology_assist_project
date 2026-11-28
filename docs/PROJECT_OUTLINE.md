@@ -35,7 +35,7 @@
   2. **长期记忆**（Redis，按会话保留对话历史）
   3. **情绪分析**（消息级情绪标签 + 会话级情绪总结 JSON）
   4. **风险分级**（关键词规则 + 情绪标签 + 大模型三方融合）
-  5. **RAG 知识检索**（Redis 向量库 + QuestionAnswerAdvisor）
+  5. **RAG 知识检索**（Redis 向量库 + 模型判定是否检索 + 查询改写 + 手动注入）
   6. **用户画像**（规划中）
   7. **上下文拼装**（规划中，把 RAG/情绪/记忆/summary 组装进提示词）
 
@@ -128,15 +128,18 @@ ConsultationMessageService  ──→  Mapper / 独立，不反向依赖上层
 - Service 之间**不允许 A↔B 互相注入**。
 - 遇到"需要互相调用"时：抽出第三个公共 Service，或让调用单向。
 
-### 3.6 三大 ChatClient 通道
+### 3.6 ChatClient 通道
 
 | Bean 名 | 用途 | 关键配置 |
 |---|---|---|
-| `chat` | 主对话 | `defaultSystem`（心理支持提示词）+ `MessageChatMemoryAdvisor`（Redis 记忆）+ 请求级 `QuestionAnswerAdvisor`（RAG） |
-| `emotionTag` | 单条情绪标签 | `defaultOptions(model=qwen3.8-flash)`，**无记忆 advisor**（避免污染） |
+| `chat` | 主对话 | 纯 builder；**无 defaultSystem、无记忆 advisor、无 RAG advisor**——system 与参考资料都由装配/检索层手动拼进 messages |
+| `emotionTag` | 单条情绪标签 | `defaultOptions(model=qwen3.8-flash)`，无记忆 advisor |
 | `emotionComplete` | 会话情绪总结 JSON | 同上，独立 client |
+| `memoryCompact` | 记忆压缩（旧摘要 + 对话 → 新摘要） | 独立 client，纯文本输出 |
+| `turnScreen` | 回合前置判定（risk / needKnowledge / searchQuery） | 独立 client，JSON 输出 |
 
-> **为什么情绪分析必须用独立 client**：`MessageChatMemoryAdvisor` 会在每次调用前后自动读写 Redis 记忆。若复用主 `chat` client，情绪分析的提示词与结果会被写进记忆库，造成污染。
+> **为什么这些能力都要独立 client**：它们只需要一个"裸模型"，不需要主对话的人设与记忆。
+> 复用 `chat` 会把情绪/摘要/判定内容写进记忆，污染对话。
 
 ---
 
@@ -183,7 +186,8 @@ src/main/java/com/driedfish/project_psychology_health_assist/
 │   ├── PromptManage.java                # 所有 Prompt 常量（系统提示词 / 单条情绪 / 会话情绪总结）
 │   ├── PsychologicalSupportService.java # 对话编排：startSession / streamPsychologicalChat / deleteSession
 │   ├── RiskAssessor.java                # 风险规则引擎：关键词扫描 + 情绪标签映射
-│   ├── redisChatMemory.java             # 手搓 Redis ChatMemory（实现 ChatMemory 接口）
+│   ├── TurnScreenService.java           # 回合前置判定：risk / needKnowledge / searchQuery（失败回落词表）
+│   ├── redisChatMemory.java             # 手搓 Redis ChatMemory（实现 ChatMemory 接口，仅作回滚保留）
 │   └── StructOutPut.java                # 结构化输出 DTO：StreamChatSession / StreamChatSessionItem / StreamChatSessionList / StreamChatMessageList
 ├── annotation/
 │   ├── CheckSessionOwner.java           # 水平越权校验注解
@@ -202,11 +206,13 @@ src/main/java/com/driedfish/project_psychology_health_assist/
 ├── rag/
 │   ├── RagDataInitializer.java          # 启动触发入库（失败不阻断启动）
 │   ├── RagIngestionService.java         # 扫目录 → 选切块策略 → 写入向量库（固定 id，幂等）
+│   ├── RagContextService.java           # 手动检索：改写词 → topK → 拼「参考资料」（失败降级）
+│   ├── RagGate.java                     # 词表门控，现作为 TurnScreen 失败时的兜底
 │   ├── chunk/
 │   │   ├── DocumentChunker.java         # 切块接口：换数据源只加实现
-│   │   ├── MarkdownHeadingChunker.java  # 按 ## 小节切，超长再按段落切
+│   │   ├── MarkdownHeadingChunker.java  # 按 ## 小节切，超长再按段落/句子切
 │   │   └── QaChunker.java               # 按「问：」切（问答语料）
-│   └── config/RagConfig.java            # JedisPooled + RedisVectorStore + QuestionAnswerAdvisor(topK)
+│   └── config/RagConfig.java            # JedisPooled + RedisVectorStore 装配（不再挂 advisor）
 ├── service/
 │   ├── ConsultationSessionService.java  # 会话 CRUD、越权校验、情绪分析落库、会话分页
 │   ├── ConsultationMessageService.java  # 消息 CRUD、情绪标签落库、最近 N 条查询
@@ -295,6 +301,22 @@ src/main/resources/data/
 | ai_model | varchar(50) | 生成该 AI 消息的模型 |
 | created_at | datetime | |
 
+#### `user_memory`（规划中，语义记忆）
+
+| 字段 | 类型 | 说明 |
+|---|---|---|
+| id | bigint PK | |
+| user_id | bigint | 外键 → user |
+| category | varchar(32) | identity / preference / goal / relationship / health |
+| **fact_key** | varchar(64) | 如 `name` / `pet` / `exam_goal`，**用于去重与覆盖** |
+| fact_value | varchar(500) | 事实内容 |
+| confidence | decimal(3,2) | 抽取置信度（显式指令高、隐式抽取低） |
+| source_message_id | bigint | 来源消息，便于追溯与删除 |
+| created_at / updated_at | datetime | |
+
+> 唯一索引建议 `(user_id, fact_key)`：同一事实只保留一条，后来者覆盖。
+> 与情景记忆（`chat_memory` + 摘要）是两个层次，互不替代。
+
 ### 6.2 遗留/待用表（原作者已有）
 - `emotion_diary`（情绪日记，含 `ai_emotion_analysis` JSON）—— 暂不做，画像阶段可作为数据源
 - `knowledge_article` / `knowledge_category`（知识库）—— RAG 数据源
@@ -352,14 +374,22 @@ saveUserMessage(sessionId, 初始消息) → 落 message 表（sender_type=1）
    - 判断是否初始消息（messageCount==1 且内容匹配 → 复用 startSession 已存的 id）
    - 否则 saveUserMessage 并拿到 userMessageId
    - return userMessageId
-2. .flatMapMany(userMessageId -> chatClient.prompt()
-       .user(userMessage)
-       .advisors(param(CONVERSATION_ID) + questionAnswerAdvisor)
-       .stream().content())
+2. .flatMapMany(userMessageId -> {
+     // 前置判定：一次小模型调用，产出风险/是否检索/检索词
+     TurnScreen screen = turnScreenService.screen(userMessage);
+     // 需要知识才检索（危机/闲聊不查）
+     String knowledge = screen.needKnowledge() ? ragContextService.buildContext(screen.searchQuery()) : null;
+     // 装配：system（人设 + 摘要）+ 历史 + 当前消息（均已截断）
+     List<Message> messages = conversationMemoryService.prepare(conversationId, dbSessionId, userMessage);
+     if (screen.risk() >= 2) messages = appendCrisisDirective(messages);   // 追加到唯一 system
+     if (knowledge != null)   messages = appendKnowledge(messages, knowledge); // 追加到当前用户消息
+     return chatClient.prompt().messages(messages).stream().content();
+   })
 3. doOnNext 累积片段 → doOnComplete 异步（boundedElastic）：
-   - saveAiMessage
+   - record（AI 回复入记忆）→ saveAiMessage
    - emotionAnalysisService.updateMessageEmotionTag(userMessageId, userMessage)
    - emotionAnalysisService.updateSessionEmotionAnalysis(sessionId, userMessage, emotionTag)
+   - conversationMemoryService.compactIfNeeded(conversationId, dbSessionId)
 4. doOnError（IOException=断连）/ doFinally（CANCEL / ON_COMPLETE）
 ```
 
@@ -401,11 +431,14 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 
 **核心原则：大模型可以"升级"风险，但绝不能"降级"风险。** 关键词命中高危词 → 无论模型怎么说都是 2。
 
-### 7.6 记忆（`RedisChatMemory`）
-- 基于 Redis List，键前缀 `chat:memory:`，会话 id 区分。
-- 写入：`rightPush` + `trim` 保留最近 N 条 + 设置 TTL。
-- 读取：`range` 解析后转为 Spring AI `Message` 列表。
-- 由主 `chat` client 的 `MessageChatMemoryAdvisor` 自动调用（业务代码不手动 add）。
+### 7.6 记忆（分层实现，替代 `RedisChatMemory`）
+
+- **双 key**：`chat_memory:<convId>`（LIST，7 天，保留最近 N 条）+ `chat_summary:<convId>`（STRING，30 天）。
+- **写入**：`append`（rightPush + trim + expire）；压缩时把新摘要写 MySQL（真源）→ Redis → 裁消息。
+- **读取**：`snapshot` 一次取摘要 + 消息；Redis 摘要为空则回落 MySQL 并回填。
+- **装配**：`ChatContextAssembler` 把快照翻成 messages（system 里拼摘要），历史做头尾截断。
+- **门面**：`ConversationMemoryService.prepare / record / compactIfNeeded / clear`，业务侧只认这四个方法。
+- 旧的 `redisChatMemory` 仅保留作回滚路径，不再参与运行。
 
 ---
 
@@ -421,7 +454,7 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 8. 消息级情绪标签（`message.emotion_tag`）
 9. 会话级情绪分析 JSON（`session.last_emotion_analysis`，11 字段）
 10. 风险分级：关键词 + 情绪标签 + 大模型三方融合
-11. RAG 基础：`RedisVectorStore` + `QuestionAnswerAdvisor`
+11. RAG 基础：`RedisVectorStore` + 手动检索（`RagContextService`，已替代 advisor）
 12. 结构化输出 DTO 拆分：`StreamChatSession` / `StreamChatSessionItem`
 13. 多 ChatClient 装配：`chat` / `emotionTag` / `emotionComplete`
 14. `riskLevel` 与 `riskDescription` 同源：统一由 `RiskLevel` 枚举产出（不再使用模型原值）
@@ -430,6 +463,10 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 17. RAG 语料分层：WHO 中文实况报道 8 篇 + 教育部纲要 + 心理健康素养十条 + 12356 热线，入库约 132 块（来源与许可见 `docs/RAG_SOURCES.md`）
 18. RAG 切块与入库：`DocumentChunker` 接口 + 标题切块/问答切块两种实现；固定 id（`source#序号`）实现幂等，重启不再重复灌库
 19. RAG 基线：`docs/rag-baseline.md` 记录检索命中、score、promptTokens，作为后续增强的对比基准
+20. 回合前置判定：`TurnScreenService` 一次小模型调用产出 `{risk, needKnowledge, searchQuery}`；
+   危机不检索并追加危机指令，闲聊不检索，外语/隐晦表达也能识别（词表降级为兜底）
+21. 手动检索：`RagContextService` 用改写词检索、拼成「参考资料」、失败降级；替代 `QuestionAnswerAdvisor`
+22. 回复语言跟随用户（不再强制简体中文）；危机话术首选 12356
 
 ---
 
@@ -443,26 +480,71 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 - **降级**：压缩失败不删原始消息；写入顺序 MySQL → Redis → 裁消息
 - 待补：压缩防重入锁（见 §11）
 
-### 阶段 2：用户画像提取
-- **静态画像**：注册信息（性别/生日/职业等）
-- **动态画像**：从 `emotion_tag` + 会话情绪 JSON 累积（情绪分布、高频主题、趋势）
-- 存储：MySQL `user_profile` 表；用途：RAG 个性化过滤 + prompt 注入画像摘要
+### 阶段 2：用户记忆库（语义记忆）＋ 画像
+
+> 结论先行：**用户画像不必单独做一套抽取**。它由「静态注册信息 + 语义记忆库 + 情绪统计」三块拼出来。
+
+**2a 用户记忆库（新增，M4 的前置）**
+
+区分两类记忆：
+
+| 类型 | 内容 | 现状 |
+|---|---|---|
+| 情景记忆 | 某轮说了什么 | ✅ 已有：`chat_memory` + 摘要压缩 |
+| **语义记忆** | 关于用户的稳定事实（称呼、专业、爱好、目标、重要关系） | ⬅ 待建 |
+
+- **双通道抽取**（不要只靠关键词，容易漏）：
+  1. **显式指令**：命中「记住 / 记一下 / 别忘了 / 我叫…」→ 立即抽取并入库；
+  2. **隐式抽取**：每轮结束后异步跑一次轻量模型，判断这句话里有没有“值得长期记住的关于用户的事实”，有则存、无则跳过（绝大多数轮次为无）。
+- **存储**：`user_memory` 表（KV 事实，不是文档），按 `fact_key` 去重与覆盖
+  （用户后来说“不考研了，改考公”，同 key 覆盖而不是累加）。
+- **注入**：拼进 system 提示词，与【历史对话摘要】并列，形如
+  `【关于你】称呼：小林 / 专业：计算机 / 近况：准备考研（2026-11 更新）`；
+  控制在 15–20 条、按“最近更新 + 重要性”排序，约 200 tokens。
+- **与画像的关系**：
+  - 静态属性（性别/生日/学校）→ 注册信息直接用；
+  - 稳定事实（称呼、爱好、目标）→ **记忆库**；
+  - 派生统计（情绪分布、趋势、高频主题）→ 情绪标签聚合，本来就不是“记忆”。
+- **隐私**：必须支持 `删除我的记忆`（`user_memory` + Redis 记忆一起清），归入 M7 隐私闭环。
+
+**2b 画像视图**
+- 不再单独建 `user_profile` 抽取管线，改为「记忆库 + 情绪统计」的只读视图；
+- 用途：RAG 个性化过滤（课程/人群相关文档）、prompt 注入画像摘要。
 
 ### 阶段 3：RAG 升级（👈 下一步）
 
-现状：`RagConfig` 定义 `VectorStore`（`RedisVectorStore`，`initializeSchema=true`）与 `QuestionAnswerAdvisor`；
-`RagDataInitializer` 灌 `resources/data/psychology_data.txt`；检索结果由 advisor 自动注入 prompt。
+现状：`RagConfig` 只装配 `VectorStore`；检索已改为**手动**（`RagContextService`），
+不再使用 `QuestionAnswerAdvisor`——因为需要"改写后的查询词"和后续 rerank。
 
 **3a 基线摸底（✅ 已完成）**
-- 已跑 4 组用例：议题型 / 知识型 / 同会话第 3 轮 / 隐晦危机表达
+- 已跑 5 组用例：议题型 / 知识型 / 同会话第 3 轮 / 隐晦危机 / 英文危机
 - 结论记录在 `docs/rag-baseline.md`：知识型命中 WHO，议题型命中问答语料；
   **危机表达召回失败**（语义相近 ≠ 意图相近），但风险分级与话术正常兜底
-- 遗留：用例 5~7 待补（治疗类 / 跨篇推理 / 失眠）
+- 遗留：治疗类 / 跨篇推理 / 失眠 三组待补
 
-**3b Query 改写**
-- 新增 `queryRewrite` 通道（`qwen3.8-flash`），把口语化问题改写成检索式
-- **只改写检索用的 query，不改给模型的原始用户消息**
-- 验收：基线里"答非所问"的问题，至少一半改善
+**3b 条件检索（✅ 已完成，替代原 RagGate 词表方案）**
+- 由 `TurnScreenService` 一次小模型调用产出 `{risk, needKnowledge, searchQuery}`：
+  · 外语、隐晦表达、第三人称叙述都能识别（词表做不到）
+  · 危机（risk≥2）不检索，改为往 system 追加危机指令
+  · 闲聊（needKnowledge=false）不检索，省 600~700 tokens
+- 词表版 `RagGate` 保留为**降级兜底**（模型调用失败时使用）
+- 代价：首字前多一次小模型调用（约 200~400ms），需实测
+
+**3b Query 改写（✅ 已完成，检索词为「原话 + 关键词」混合）**
+- `searchQuery` 由同一个 screen 调用产出：把口语/英文问题改写成 3~10 字中文检索词
+- **实际检索词 = 用户原话（截 100 字）+ 改写的关键词**：
+  · 只留原话 → 带上口语噪声；只留改写词 → 丢掉具体说法（"睡不好"被改成"失眠"，反而偏离语料用词）
+  · 关键词若已包含在原话里则去重
+- 只用于检索，不改原始用户消息
+- ⚠️ 仍待评估：三种检索词（原话 / 改写词 / 混合）的命中率 A/B 对比，与 rerank 一起做
+
+**3b-2 检索结果后处理（❌ 缺失，优先补）**
+- 现状：`RagContextService` 把 topK 文档**原样拼接**，没有去重、截断、相关性过滤
+- 待补：
+  · 单块截断（如 300 字），避免一块 800 字把上下文撑爆
+  · 按 `source#index` 去重（相邻块有重叠段）
+  · 注入总量上限（如 900 字）
+  · 可选的分数下限（只做"挡住完全不相关"，不做精度旋钮）
 
 **3c 多路召回（向量 + BM25）**
 - 向量：现有 `similaritySearch`
@@ -479,7 +561,7 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 
 **注意**：
 - 3b–3d 都会增加首字延迟，必须跑在 `boundedElastic` 上，并设超时与降级（检索失败 → 不注入，对话照常）
-- RAG 目前是 advisor；阶段 4 收编成手动拼装时再改
+- 注入方式已改为：把「参考资料」追加到最后一条用户消息后面（与 advisor 行为一致）
 
 ### 阶段 4：上下文拼装（收口）
 - 抽独立 `ContextAssembler`，把以下拼进 prompt（分层）：
@@ -526,6 +608,9 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
 6. 情绪标签写入前 `trim()`；只取用户消息、内容截断再喂模型。
 7. 会话列表等聚合查询控制为**固定次数**，避免 N+1。
 8. 风险等级与风险描述的映射统一放 `RiskLevel` 枚举，**不在业务代码里手写 switch / Map**；新增等级只改枚举一处。
+9. **注释用 `//` 行注释，不用 `/** */` 块**；只写“为什么”（踩过的坑、反直觉的取舍），不写“是什么”。
+10. **一个方法只做一件事，禁止方法套方法**：不要 `alignXxx` / `findXxx` 这种小 helper 链，除非它真被复用且需要单独测试。
+11. **简单优先**：能整数就别浮点 + `Math.ceil`；能一行 `if` 就别上设计模式；没有第二个实现前不抽接口。（完整清单见 PRD §7.1）
 
 ### 10.3 记忆层约定（M3 定稿）
 
@@ -537,6 +622,7 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
    - 压缩**必须先 `saveSummary` 再 `trimTo`**：反了会“消息已删、摘要未写”，那段对话永久丢失；先写摘要最坏只是重复描述；
    - 压缩失败不删消息、不覆盖旧摘要。
 5. **旧 `ChatMemory` 退役但不删**：`redisChatMemory` 保留为回滚路径，新链路验证通过后再移除。它只认 `USER` / `ASSISTANT`，新链路写 `AI` 会解析失败，所以**回滚前先清 `chat_memory:*`**——记忆是缓存，MySQL 才是真相。
+6. **两类记忆分层**：情景记忆（说了什么，`chat_memory` + 摘要）与语义记忆（关于用户的稳定事实，`user_memory`）**分开存**。事实不要压进摘要（会被稀释），摘要不要当事实库用（会漂移）。
 
 ---
 
@@ -558,7 +644,15 @@ analysis.setRiskDescription(level.getDescription())        # 必须与 riskLevel
   `org.springframework.ai.chat.client.advisor: DEBUG` 只用于看 prompt，长期开启会刷屏并有开销。
 - [ ] 隐晦危机表达召回：已在 `suicide.md` 补「常见的求助表达」一节（document expansion），待重测；
   若仍不命中，按 M7 方案让 riskLevel=2 时不走 RAG、直接注入干预模板。
-- [x] ~~历史 token 膨胀~~：`ChatContextAssembler` 装配时把 AI 历史截断到 200 字（用户消息不截）。
+- [x] ~~历史 token 膨胀~~：`ChatContextAssembler` 装配时把历史消息做「头 60% + 尾 40%」截断（AI 300 字 / 用户 300 字），保住 AI 结尾的引导提问；当前问题不截断。
+- [ ] 用户记忆库（语义记忆）：建 `user_memory` 表 + `UserMemoryService`（双通道抽取 + 按 `fact_key` 覆盖）+ `assemble` 注入【关于你】段落；删除记忆能力归入 M7。详见 §9 阶段 2。
+- [ ] **风险细分信号（M7 一起做）**：`riskLevel` 维持 0/1/2 契约不变，screen 额外输出 `riskSignals`（ideation / plan / intent / means / recentAttempt）；紧急模式（plan/means/attempt）不再追问，直接给 110/120 并要求立刻找身边的人。
+- [ ] **改写收益待评估**：`searchQuery` 由模型自由改写，可能引入原话没有的主题，也可能丢信息
+  （实测"我睡不好觉"被改写成"失眠"，而语料原文用的就是"睡不好"）。
+  先做 A/B 对比：同一批问题分别用「原话」和「改写词」检索，比 top1 命中率与分数，再决定保留改写、还是原话优先。
+- [ ] **检索结果后处理（与 rerank 一起设计）**：单块截断、按 `source#index` 去重、注入总量上限——
+  这些阈值取决于切块粒度与 rerank 取几条，先定 rerank 再定参数，避免返工。
+- [ ] `MemoryTextTruncator` 重构：现在是手写字符循环 + 魔数（`/2`、把 `.` 当句末），计划改成正则切句并按字符预算取头尾。
 
 ---
 

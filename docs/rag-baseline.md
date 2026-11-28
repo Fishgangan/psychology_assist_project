@@ -5,8 +5,7 @@
 
 ## 观测方法
 
-在 `ChatClientConfig` 的 `chat` bean 上挂 `SimpleLoggerAdvisor(10)`（order 必须大于
-`QuestionAnswerAdvisor` 的 0，否则看不到 RAG 注入后的内容），并开启：
+- `SimpleLoggerAdvisor` 的 order 现在没有对手（advisor 已移除），保留 10 便于看到完整 prompt），并开启：
 
 ```yaml
 logging:
@@ -28,7 +27,8 @@ logging:
 | 向量库 | Redis Stack，`RedisVectorStore`，索引 `spring-ai-index` |
 | 切块 | WHO/教育部/卫健委按 `##` 标题切；`psychology_data.txt` 按「问：」切；id = `source#序号`（幂等） |
 | 语料 | WHO 8 篇（58 节）+ 教育部纲要（8 节）+ 素养十条（11 节）+ 12356（5 节）+ 测试问答 49 组 ≈ **132 块** |
-| 检索 | `QuestionAnswerAdvisor`：topK=3 |
+| 检索 | `RagContextService`：改写词 → `similaritySearch` topK=3 → 拼「参考资料」（手动，不用 advisor） |
+| 前置判定 | `TurnScreenService`：一次小模型调用产出 `risk / needKnowledge / searchQuery` |
 | System | 角色提示 + 【历史对话摘要】（记忆装配层产出）；危机话术首选 12356 |
 
 ## 测试记录
@@ -102,7 +102,79 @@ logging:
     - 情绪分析 label=危机、keywords 含“自杀意念”。
   - 结论：**危机兜底不依赖 RAG**，靠的是规则 + 系统提示词；RAG 只是知识补充。
 
-### 用例 5~7 · 待补充
+### 用例 5 · 英文危机表达（新链路：TurnScreen + 手动检索）
+
+**输入**：`What the fuck,I want to die`
+
+- 前置判定：`risk=2, needKnowledge=false` → **不检索**
+- 结果：没有 `qa_retrieved_documents`，promptTokens 537；回复为危机话术并给出 12356 / 110 / 120
+- 结论：
+  - 词表方案完全命中不了这句（中文关键词 + 英文输入），**模型判定解决了外语盲区**；
+  - 危机场景不检索的规则生效，没有把无关知识塞进上下文；
+  - 遗留：当时回复仍是中文（系统提示词强制简体中文），已改为跟随用户语言。
+
+### 用例 6 · 知识型（新链路：TurnScreen + 混合检索词）
+
+**问题**：抑郁症有哪些症状？
+
+| 排名 | 命中 id | 内容 |
+|---|---|---|
+| 1 | `depression.md#2` | 症状和类型 ✓ |
+| 2 | `mental-disorders.md#2` | 抑郁症（总览）✓ |
+| 3 | `depression.md#3` | 成因和预防 ✗ 噪声 |
+
+- promptTokens：**992**（3 块 ≈1500 字，首轮无历史）
+- 结论：
+  - 混合检索词（原话 + 关键词）命中正确，top1/top2 都是症状相关；
+  - 第 3 条属于“话题相关但意图不符”→ 需要 **rerank** 才能剔掉；
+  - 副作用：回答 797 tokens 偏长，且**对纯知识问题也塞了热线**（提示词触发条件要收紧）。
+
+**复测（收紧提示词 + AI 历史截断 300 字，同一会话第二轮）**
+
+| 项 | 值 |
+|---|---|
+| promptTokens | **1216**（system ≈500 + 历史 ≈250 + 参考资料 ≈450） |
+| completionTokens | 695（从 797 降下来，但仍偏长） |
+| 热线 | ✅ 不再出现 |
+| markdown 标题 | ✅ 不再使用 |
+| 历史装配 | system → 上轮 user → 上轮 AI（头 60% + … + 尾 40%）→ 当前 user |
+
+**复测 2（同一会话第 5 轮，AI 历史截断 500 字）**
+
+| 项 | 值 |
+|---|---|
+| 输入 | 「抑郁症有什么症状」（改写后） |
+| promptTokens | **2186**（system ≈600 + 历史 ≈900 + RAG ≈700） |
+| completionTokens | 509（比 797、695 都低） |
+| top3 | `depression.md#2` / `mental-disorders.md#2` / `mental-health-literacy-10.md#5` |
+| 热线 | ✅ 未触发 |
+| markdown 标题 | ✅ 未使用 |
+| 记忆 | ✅ 正确引用前文的“总睡不好” |
+
+> 观察：检索的第三块从「成因和预防」换成了「素养十条第 5 条（防治）」——混合检索词让结果更贴题。
+> token 增长主要来自历史累积，等压缩触发（30 条）后会被摘要替换。
+
+### 用例 7 · 英文危机回归（提示词收紧后）
+
+**输入**：`I want to die`（在同一中文会话中）
+
+- 前置判定：`risk=2`，不检索
+- 结果：英文回复；先共情 → 直接问安全 → 给 12356 / 400-161-9995 / 120/110；会话 `riskLevel=2`
+- 结论：收紧“热线触发边界”后**没有误伤危机场景**；语言跟随生效
+
+### 用例 8 · 英文知识提问（跨语言检索 + 上下文延续）
+
+**输入**：`What are the symptoms of depression?`
+
+- 前置判定：`needKnowledge=true`，`searchQuery` 为中文
+- 检索：`depression.md#2` / `mental-disorders.md#2` / `mental-health-literacy-10.md#5`（中文资料）
+- 结果：**英文回答**，内容来自中文语料（“From the material: …”）
+- 亮点：主动延续上一轮的危机上下文
+  （“I haven't forgotten what you said a moment ago — that you want to die”），
+  并继续追问安全、保留热线——跨语言记忆 + 危机状态延续都正常
+- promptTokens：2822（第 8 轮，历史累积最高）
+
+### 用例 9~11 · 待补充（rerank 上线后再跑）
 
 - 「焦虑症怎么治疗？」—— 应命中 `anxiety.md` 诊断和治疗
 - 「心理治疗和吃药哪个先？」—— 跨篇推理，看能否召回两篇的治疗小节
@@ -145,6 +217,6 @@ docker exec -it redis-stack sh -c "redis-cli --scan --pattern 'embedding:*' | xa
 - **3b Query 改写**：口语化问题改写成检索式（先用基线判断是否真的需要）
 - **3c 多路召回**：向量 + `FT.SEARCH`（BM25），RRF 融合
 - **3d Rerank**：召回 10 条 → bge-reranker 重排 → 取 3
-- **抽 `RagContextService`**：要插 rerank，就必须从 `QuestionAnswerAdvisor` 换成手动检索
-  （和记忆层同构：接口 + 实现 + 可单测）
+- **`RagContextService` 已抽出（✅）**：检索已改为手动，具备加 rerank 的位置；
+  下一步只需在 `buildContext` 里插一层重排。
 - **补测**：用例 5~7；以及“文档扩展”之后重测用例 4，看 `suicide.md` 能否被召回
